@@ -14,3 +14,6 @@ tools/mic_*.txt
 walk_bench.txt
 tools/walk_bench.txt
 _backup*/
+eva-scorecard.txt
+*.before-split
+tools/*.txt
