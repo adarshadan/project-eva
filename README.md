@@ -1,4 +1,4 @@
-# Eva — Desktop Avatar
+# Project EVA - Everything Virtual Assistant
 
 A Windows desktop assistant: an animated 3D character who lives on your desktop, listens, speaks,
 and operates the computer for you — apps and windows, any on-screen control, the web, files,
