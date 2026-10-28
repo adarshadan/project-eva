@@ -8,7 +8,8 @@ reminders — asking you only before something destructive or something that spe
 
 Windows 10/11, Python 3.10+.
 
-1. Extract the zip to a **fresh, empty** folder (never over an older copy).
+1. Clone the repository (`git clone https://github.com/adarshadan/project-eva`), or extract the
+   zip to a **fresh, empty** folder (never over an older copy).
 2. Double-click `run.bat`. The first run creates a virtual environment and installs everything.
 3. First time only: `playwright install chromium` inside that environment, for browser tasks.
 4. Give Eva your NVIDIA API key: right-click her tray icon → **Set API key** (stored encrypted for
@@ -162,3 +163,9 @@ and override `config.py`; those marked * apply after a restart. What asks first
 `python run_checks.py` runs anywhere (Windows libraries are stubbed) and drives whole turns
 through the real agent with a scripted model. It cannot verify the screen, microphone, audio or a
 real browser — only running Eva on Windows can.
+
+## Licence
+
+Copyright 2026 Adarsha Dan. Licensed under the Apache License, Version 2.0 -- see [LICENSE](LICENSE).
+The skills in `skills/library/` keep their own authors' licences (MIT and others), listed in
+`skills/library/NOTICE.md`.
