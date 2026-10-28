@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+web/assets/
+eva.log*
+*.log
+*_result.txt
+tools/*_trial*.txt
+tools/jobs/
+tools/tts_samples/
+tools/feel_shots/
+mic_*.txt
+tools/mic_*.txt
+walk_bench.txt
+tools/walk_bench.txt
+_backup*/

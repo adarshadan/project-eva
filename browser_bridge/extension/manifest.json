@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Eva Browser Bridge",
+  "short_name": "Eva",
+  "version": "1.0.0",
+  "description": "Lets Eva, your desktop assistant, read and work with the page you have open -- only when you ask her.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlbAnarVKnidK2Pk7SAKPGnmuf+IrT1nsBtMT1Oe4jSY0k7mycVOTbmgC5j2+UDDHR+4sQRe7D4k9rsMYiwBIJvJEi8N84COTFAALoNG5UZutem8btUQZW0YbkvnRAfVZYFJrmBOUpmngwLTxNKq4I/JLTF0HXKJtK6GGWwR3UZ7SIPSEaxFm5/pek9/gcXjRxuS7nFYFaeZ8t+xPvm4mNtKag++Yoj29eisV9PcxjPalzNsBVYW/z9UeUHsYcmXnj0WMD2H+9/nQBV/b1gd5UbXiOIJlfAVODvQXZamET3Xb4eyvabKqycRdydVh7tv7+YwGRVMHwDzhP7s4/tLT+QIDAQAB",
+  "permissions": ["nativeMessaging", "tabs", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Eva Browser Bridge" },
+  "minimum_chrome_version": "116"
+}

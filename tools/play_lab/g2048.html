@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>2048</title>
+<style>body{margin:0;background:#faf8ef;display:flex;justify-content:center;align-items:center;height:100vh;font-family:Arial}
+#b{background:#bbada0;padding:12px;display:grid;grid-template-columns:repeat(4,100px);gap:12px;border-radius:6px}
+.t{width:100px;height:100px;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:bold;border-radius:3px}
+#msg{position:fixed;top:10px;width:100%;text-align:center;font-size:22px}</style>
+<div id=msg>score 0</div><div id=b></div>
+<script>
+const COL={0:'#cdc1b4',2:'#eee4da',4:'#ede0c8',8:'#f2b179',16:'#f59563',32:'#f67c5f',64:'#f65e3b',128:'#edcf72',256:'#edcc61',512:'#edc850',1024:'#edc53f',2048:'#edc22e'};
+let B=[...Array(4)].map(()=>Array(4).fill(0)),score=0,over=false;const el=document.getElementById('b');for(let i=0;i<16;i++){const d=document.createElement('div');d.className='t';el.appendChild(d)}
+function add(){const e=[];B.forEach((r,i)=>r.forEach((v,j)=>{if(!v)e.push([i,j])}));if(!e.length)return;const[i,j]=e[Math.floor(Math.random()*e.length)];B[i][j]=Math.random()<.9?2:4}
+function draw(){[...el.children].forEach((d,k)=>{const v=B[k>>2][k&3];d.textContent=v||'';d.style.background=COL[v]||'#3c3a32';d.style.color=v>4?'#f9f6f2':'#776e65'});document.getElementById('msg').textContent='score '+score}
+function slide(r){const t=r.filter(v=>v),o=[];for(let i=0;i<t.length;i++){if(t[i]===t[i+1]){o.push(t[i]*2);score+=t[i]*2;i++}else o.push(t[i])}while(o.length<4)o.push(0);return o}
+function move(d){const old=JSON.stringify(B);let b=B.map(r=>r.slice());const T=m=>m[0].map((_,i)=>m.map(r=>r[i]));
+ if(d=='up'||d=='down')b=T(b);if(d=='right'||d=='down')b=b.map(r=>r.reverse());b=b.map(slide);if(d=='right'||d=='down')b=b.map(r=>r.reverse());if(d=='up'||d=='down')b=T(b);
+ B=b;if(JSON.stringify(B)!==old){add();draw();if(!canMove()){over=true;window.RESULT='over '+score+' max '+Math.max(...B.flat())}}}
+function canMove(){for(let i=0;i<4;i++)for(let j=0;j<4;j++){if(!B[i][j])return true;if(j<3&&B[i][j]==B[i][j+1])return true;if(i<3&&B[i][j]==B[i+1][j])return true}return false}
+document.onkeydown=e=>{const m={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down'}[e.key];if(m&&!over){e.preventDefault();move(m)}};add();add();draw();
+</script>

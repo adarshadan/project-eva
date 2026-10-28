@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>Flappy</title>
+<style>body{margin:0;background:#222;display:flex;justify-content:center;align-items:center;height:100vh}</style>
+<canvas id=c width=400 height=600></canvas>
+<script>
+// Classic look and physics: sky, green pipes with a gap, a yellow bird, gravity, a flap on Space or click.
+const cv=document.getElementById('c'),g=cv.getContext('2d');let y=300,v=0,pipes=[],t=0,score=0,started=false,dead=false,last=performance.now();
+const GAP=150,W=60,SPEED=150,GRAV=1500,FLAP=-430;window.SCORE=0;
+function flap(){if(dead)return;started=true;v=FLAP}
+document.onkeydown=e=>{if(e.code=='Space'){e.preventDefault();flap()}};cv.onclick=flap;
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;
+ if(started&&!dead){v+=GRAV*dt;y+=v*dt;t+=dt;if(!pipes.length||pipes[pipes.length-1].x<400-230)pipes.push({x:400,gy:120+Math.random()*(600-120-GAP-140),passed:false});
+  for(const p of pipes){p.x-=SPEED*dt;if(!p.passed&&p.x+W<80){p.passed=true;score++;window.SCORE=score}}pipes=pipes.filter(p=>p.x>-W);
+  for(const p of pipes)if(80+12>p.x&&80-12<p.x+W&&(y-12<p.gy||y+12>p.gy+GAP))dead=true;if(y>560||y<0)dead=true;if(dead)window.RESULT='dead '+score}
+ g.fillStyle='#70c5ce';g.fillRect(0,0,400,600);g.fillStyle='#73bf2e';for(const p of pipes){g.fillRect(p.x,0,W,p.gy);g.fillRect(p.x,p.gy+GAP,W,600-p.gy-GAP)}
+ g.fillStyle='#ded895';g.fillRect(0,572,400,28);g.fillStyle='#f7d51d';g.beginPath();g.arc(80,y,12,0,7);g.fill();g.fillStyle='#fff';g.font='28px Arial';g.fillText(score,190,50);
+ if(!dead)requestAnimationFrame(frame)}requestAnimationFrame(frame);
+</script>

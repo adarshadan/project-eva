@@ -1,0 +1,3640 @@
+{
+ "generated": "2026-10-10",
+ "skills": [
+  {
+   "name": "claude-code",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/skills/autonomous-ai-agents/claude-code/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "codex",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/skills/autonomous-ai-agents/codex/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "computer-use",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/skills/autonomous-ai-agents/computer-use/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "hermes-agent",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/skills/autonomous-ai-agents/hermes-agent/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "opencode",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/skills/autonomous-ai-agents/opencode/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "architecture-diagram",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/architecture-diagram/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "ascii-video",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/ascii-video/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "baoyu-infographic",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/baoyu-infographic/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "claude-design",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/claude-design/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "design-md",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/design-md/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "humanizer",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/humanizer/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "manim-video",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/manim-video/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "p5js",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/p5js/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "popular-web-designs",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/popular-web-designs/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "songwriting-and-ai-music",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/skills/creative/songwriting-and-ai-music/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "sdlc-review",
+   "source": "hermes",
+   "category": "devops",
+   "path": "hermes/skills/devops/sdlc-review/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "email-inbox-triage",
+   "source": "hermes",
+   "category": "email",
+   "path": "hermes/skills/email/email-inbox-triage/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "himalaya",
+   "source": "hermes",
+   "category": "email",
+   "path": "hermes/skills/email/himalaya/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "gif-search",
+   "source": "hermes",
+   "category": "media",
+   "path": "hermes/skills/media/gif-search/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "songsee",
+   "source": "hermes",
+   "category": "media",
+   "path": "hermes/skills/media/songsee/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "youtube-content",
+   "source": "hermes",
+   "category": "media",
+   "path": "hermes/skills/media/youtube-content/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "obsidian",
+   "source": "hermes",
+   "category": "note-taking",
+   "path": "hermes/skills/note-taking/obsidian/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "airtable",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/airtable/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "box",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/box/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "document-to-action-items",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/document-to-action-items/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "docx",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/docx/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "google-workspace",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/google-workspace/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "maps",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/maps/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "meeting-action-items",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/meeting-action-items/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "notion",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/notion/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "pdf",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/pdf/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "powerpoint",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/powerpoint/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "product-price-monitor",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/product-price-monitor/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "teams-meeting-pipeline",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/teams-meeting-pipeline/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "weekly-review-planning",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/weekly-review-planning/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "xlsx",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/skills/productivity/xlsx/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "arxiv",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/skills/research/arxiv/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "competitor-news-monitor",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/skills/research/competitor-news-monitor/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "grounded-citations",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/skills/research/grounded-citations/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "llm-wiki",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/skills/research/llm-wiki/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "codebase-inspection",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/codebase-inspection/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "dogfood",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/dogfood/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "github",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/github/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "hermes-agent-skill-authoring",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/hermes-agent-skill-authoring/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "inspecting-hermes-desktop-dom",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/inspecting-hermes-desktop-dom/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "node-inspect-debugger",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/node-inspect-debugger/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "requesting-code-review",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/requesting-code-review/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "simplify-code",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/simplify-code/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "spike",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/spike/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "systematic-debugging",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/systematic-debugging/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "test-driven-development",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/skills/software-development/test-driven-development/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "blocked-page-recovery",
+   "source": "hermes",
+   "category": "web",
+   "path": "hermes/skills/web/blocked-page-recovery/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "agent-merge-conflict-arbiter",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/optional-skills/autonomous-ai-agents/agent-merge-conflict-arbiter/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "antigravity-cli",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/optional-skills/autonomous-ai-agents/antigravity-cli/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "blackbox",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/optional-skills/autonomous-ai-agents/blackbox/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "dynamic-workflow",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/optional-skills/autonomous-ai-agents/dynamic-workflow/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "grok",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/optional-skills/autonomous-ai-agents/grok/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "honcho",
+   "source": "hermes",
+   "category": "autonomous-ai-agents",
+   "path": "hermes/optional-skills/autonomous-ai-agents/honcho/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "evm",
+   "source": "hermes",
+   "category": "blockchain",
+   "path": "hermes/optional-skills/blockchain/evm/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "hyperliquid",
+   "source": "hermes",
+   "category": "blockchain",
+   "path": "hermes/optional-skills/blockchain/hyperliquid/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "solana",
+   "source": "hermes",
+   "category": "blockchain",
+   "path": "hermes/optional-skills/blockchain/solana/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "one-three-one-rule",
+   "source": "hermes",
+   "category": "communication",
+   "path": "hermes/optional-skills/communication/one-three-one-rule/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "archify",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/archify/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "ascii-art",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/ascii-art/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "auteur",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/auteur/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "baoyu-article-illustrator",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/baoyu-article-illustrator/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "baoyu-comic",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/baoyu-comic/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "brag",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/brag/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "brag-slim",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/brag-slim/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "comfyui",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/comfyui/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "concept-diagrams",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/concept-diagrams/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "creative-ideation",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/creative-ideation/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "draw-your-font",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/draw-your-font/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "excalidraw",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/excalidraw/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "hyperframes",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/hyperframes/SKILL.md",
+   "licence": "Apache-2.0"
+  },
+  {
+   "name": "impeccable",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/impeccable/SKILL.md",
+   "licence": "Apache-2.0"
+  },
+  {
+   "name": "ip-as-logo",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/ip-as-logo/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "kanban-video-orchestrator",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/kanban-video-orchestrator/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "meme-generation",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/meme-generation/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "mono-color",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/mono-color/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "pixel-art",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/pixel-art/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "pretext",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/pretext/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "simple-english",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/simple-english/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "sketch",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/sketch/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "social-media-content-calendar",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/social-media-content-calendar/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "tldraw-offline",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/tldraw-offline/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "unreal-mcp",
+   "source": "hermes",
+   "category": "creative",
+   "path": "hermes/optional-skills/creative/unreal-mcp/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "jupyter-notebook",
+   "source": "hermes",
+   "category": "data-science",
+   "path": "hermes/optional-skills/data-science/jupyter-notebook/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "actual-setup",
+   "source": "hermes",
+   "category": "devops",
+   "path": "hermes/optional-skills/devops/actual-setup/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "docker-management",
+   "source": "hermes",
+   "category": "devops",
+   "path": "hermes/optional-skills/devops/docker-management/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "inference-sh-cli",
+   "source": "hermes",
+   "category": "devops",
+   "path": "hermes/optional-skills/devops/inference-sh-cli/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "pinggy-tunnel",
+   "source": "hermes",
+   "category": "devops",
+   "path": "hermes/optional-skills/devops/pinggy-tunnel/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "adversarial-ux-test",
+   "source": "hermes",
+   "category": "dogfood",
+   "path": "hermes/optional-skills/dogfood/adversarial-ux-test/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "agentmail",
+   "source": "hermes",
+   "category": "email",
+   "path": "hermes/optional-skills/email/agentmail/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "3-statement-model",
+   "source": "hermes",
+   "category": "finance",
+   "path": "hermes/optional-skills/finance/3-statement-model/SKILL.md",
+   "licence": "Apache-2.0"
+  },
+  {
+   "name": "comps-analysis",
+   "source": "hermes",
+   "category": "finance",
+   "path": "hermes/optional-skills/finance/comps-analysis/SKILL.md",
+   "licence": "Apache-2.0"
+  },
+  {
+   "name": "dcf-model",
+   "source": "hermes",
+   "category": "finance",
+   "path": "hermes/optional-skills/finance/dcf-model/SKILL.md",
+   "licence": "Apache-2.0"
+  },
+  {
+   "name": "excel-author",
+   "source": "hermes",
+   "category": "finance",
+   "path": "hermes/optional-skills/finance/excel-author/SKILL.md",
+   "licence": "Apache-2.0"
+  },
+  {
+   "name": "lbo-model",
+   "source": "hermes",
+   "category": "finance",
+   "path": "hermes/optional-skills/finance/lbo-model/SKILL.md",
+   "licence": "Apache-2.0"
+  },
+  {
+   "name": "merger-model",
+   "source": "hermes",
+   "category": "finance",
+   "path": "hermes/optional-skills/finance/merger-model/SKILL.md",
+   "licence": "Apache-2.0"
+  },
+  {
+   "name": "polymarket",
+   "source": "hermes",
+   "category": "finance",
+   "path": "hermes/optional-skills/finance/polymarket/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "pptx-author",
+   "source": "hermes",
+   "category": "finance",
+   "path": "hermes/optional-skills/finance/pptx-author/SKILL.md",
+   "licence": "Apache-2.0"
+  },
+  {
+   "name": "stocks",
+   "source": "hermes",
+   "category": "finance",
+   "path": "hermes/optional-skills/finance/stocks/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "pokemon-player",
+   "source": "hermes",
+   "category": "gaming",
+   "path": "hermes/optional-skills/gaming/pokemon-player/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "fitness-nutrition",
+   "source": "hermes",
+   "category": "health",
+   "path": "hermes/optional-skills/health/fitness-nutrition/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "neuroskill-bci",
+   "source": "hermes",
+   "category": "health",
+   "path": "hermes/optional-skills/health/neuroskill-bci/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "fastmcp",
+   "source": "hermes",
+   "category": "mcp",
+   "path": "hermes/optional-skills/mcp/fastmcp/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "mcporter",
+   "source": "hermes",
+   "category": "mcp",
+   "path": "hermes/optional-skills/mcp/mcporter/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "openclaw-migration",
+   "source": "hermes",
+   "category": "migration",
+   "path": "hermes/optional-skills/migration/openclaw-migration/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "accelerate",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/accelerate/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "chroma",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/chroma/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "clip",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/clip/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "weights-and-biases",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/evaluation/weights-and-biases/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "guidance",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/guidance/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "huggingface-tokenizers",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/huggingface-tokenizers/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "llama-cpp",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/inference/llama-cpp/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "outlines",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/inference/outlines/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "instructor",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/instructor/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "lambda-labs",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/lambda-labs/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "llava",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/llava/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "modal",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/modal/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "huggingface-hub",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/models/huggingface-hub/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "segment-anything-model",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/models/segment-anything-model/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "peft",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/peft/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "pinecone",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/pinecone/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "pytorch-lightning",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/pytorch-lightning/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "qdrant",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/qdrant/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "dspy",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/research/dspy/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "saelens",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/saelens/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "simpo",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/simpo/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "stable-diffusion",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/stable-diffusion/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "trl-fine-tuning",
+   "source": "hermes",
+   "category": "mlops",
+   "path": "hermes/optional-skills/mlops/training/trl-fine-tuning/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "canvas",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/canvas/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "decision-questionnaire",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/decision-questionnaire/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "first-task",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/first-task/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "initiate-setup",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/initiate-setup/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "live-dashboard",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/live-dashboard/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "property-listings",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/property-listings/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "shop",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/shop/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "shopify",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/shopify/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "siyuan",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/siyuan/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "telephony",
+   "source": "hermes",
+   "category": "productivity",
+   "path": "hermes/optional-skills/productivity/telephony/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "blogwatcher",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/blogwatcher/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "domain-intel",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/domain-intel/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "drug-discovery",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/drug-discovery/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "duckduckgo-search",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/duckduckgo-search/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "gitnexus-explorer",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/gitnexus-explorer/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "osint-investigation",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/osint-investigation/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "parallel-cli",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/parallel-cli/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "pinecone-research",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/pinecone-research/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "rss-feeds",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/rss-feeds/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "scrapling",
+   "source": "hermes",
+   "category": "research",
+   "path": "hermes/optional-skills/research/scrapling/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "1password",
+   "source": "hermes",
+   "category": "security",
+   "path": "hermes/optional-skills/security/1password/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "oss-forensics",
+   "source": "hermes",
+   "category": "security",
+   "path": "hermes/optional-skills/security/oss-forensics/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "unbroker",
+   "source": "hermes",
+   "category": "security",
+   "path": "hermes/optional-skills/security/unbroker/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "openhue",
+   "source": "hermes",
+   "category": "smart-home",
+   "path": "hermes/optional-skills/smart-home/openhue/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "reddit-reading",
+   "source": "hermes",
+   "category": "social-media",
+   "path": "hermes/optional-skills/social-media/reddit-reading/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "ast-grep",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/optional-skills/software-development/ast-grep/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "code-wiki",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/optional-skills/software-development/code-wiki/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "grill-me",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/optional-skills/software-development/grill-me/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "rest-graphql-debug",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/optional-skills/software-development/rest-graphql-debug/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "subagent-driven-development",
+   "source": "hermes",
+   "category": "software-development",
+   "path": "hermes/optional-skills/software-development/subagent-driven-development/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "cloudflare-temporary-deploy",
+   "source": "hermes",
+   "category": "web-development",
+   "path": "hermes/optional-skills/web-development/cloudflare-temporary-deploy/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "har-derived-api-client",
+   "source": "hermes",
+   "category": "web-development",
+   "path": "hermes/optional-skills/web-development/har-derived-api-client/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "page-agent",
+   "source": "hermes",
+   "category": "web-development",
+   "path": "hermes/optional-skills/web-development/page-agent/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "publish-site",
+   "source": "hermes",
+   "category": "web-development",
+   "path": "hermes/optional-skills/web-development/publish-site/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "scrollcraft",
+   "source": "hermes",
+   "category": "web-development",
+   "path": "hermes/optional-skills/web-development/scrollcraft/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "yuanbao",
+   "source": "hermes",
+   "category": "hermes",
+   "path": "hermes/optional-skills/yuanbao/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "brainstorming",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/brainstorming/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "diagnosing-superpowers",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/diagnosing-superpowers/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "dispatching-parallel-agents",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/dispatching-parallel-agents/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "executing-plans",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/executing-plans/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "finishing-a-development-branch",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/finishing-a-development-branch/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "receiving-code-review",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/receiving-code-review/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "requesting-code-review",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/requesting-code-review/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "subagent-driven-development",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/subagent-driven-development/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "systematic-debugging",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/systematic-debugging/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "test-driven-development",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/test-driven-development/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "using-git-worktrees",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/using-git-worktrees/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "using-superpowers",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/using-superpowers/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "verification-before-completion",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/verification-before-completion/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "writing-plans",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/writing-plans/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "writing-skills",
+   "source": "superpowers",
+   "category": "superpowers",
+   "path": "superpowers/writing-skills/SKILL.md",
+   "licence": "MIT"
+  },
+  {
+   "name": "Anthropologist",
+   "source": "agency-agents",
+   "category": "academic",
+   "path": "agency-agents/academic/academic-anthropologist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Geographer",
+   "source": "agency-agents",
+   "category": "academic",
+   "path": "agency-agents/academic/academic-geographer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Historian",
+   "source": "agency-agents",
+   "category": "academic",
+   "path": "agency-agents/academic/academic-historian.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Narratologist",
+   "source": "agency-agents",
+   "category": "academic",
+   "path": "agency-agents/academic/academic-narratologist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Psychologist",
+   "source": "agency-agents",
+   "category": "academic",
+   "path": "agency-agents/academic/academic-psychologist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Statistician",
+   "source": "agency-agents",
+   "category": "academic",
+   "path": "agency-agents/academic/academic-statistician.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Brand Guardian",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-brand-guardian.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Image Prompt Engineer",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-image-prompt-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Inclusive Visuals Specialist",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-inclusive-visuals-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Persona Walkthrough Specialist",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-persona-walkthrough.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "UI Designer",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-ui-designer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "UI Finish-Gate Reviewer",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-ui-finish-gate-reviewer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "UX Architect",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-ux-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "UX Researcher",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-ux-researcher.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Visual Storyteller",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-visual-storyteller.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Whimsy Injector",
+   "source": "agency-agents",
+   "category": "design",
+   "path": "agency-agents/design/design-whimsy-injector.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "AI Data Remediation Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-ai-data-remediation-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "AI Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-ai-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "API Platform Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-api-platform-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "ATS Validator Architect",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-ats-validator-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Autonomous Optimization Architect",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-autonomous-optimization-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Backend Architect",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-backend-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "China Network Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-china-network-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "CMS Developer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-cms-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Code Reviewer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-code-reviewer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Codebase Onboarding Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-codebase-onboarding-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Data Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-data-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Data Visualization Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-data-visualization-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Database Optimizer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-database-optimizer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Database Reliability Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-database-reliability-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Desktop App Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-desktop-app-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Developer Tooling Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-developer-tooling-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "DevOps Automator",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-devops-automator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Drupal Performance Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-drupal-performance.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Drupal Shopping Cart Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-drupal-shopping-cart.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Email Intelligence Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-email-intelligence-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Embedded Firmware Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-embedded-firmware-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Feishu Integration Developer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-feishu-integration-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Filament Optimization Specialist",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-filament-optimization-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "FinOps Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-finops-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Frontend Developer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-frontend-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "GaussDB Expert Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-gaussdb-expert.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Git Workflow Master",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-git-workflow-master.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Internationalization Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-i18n-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Identity & Access Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-identity-access-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Incident Response Commander",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-incident-response-commander.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "IoT Fleet Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-iot-fleet-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "IT Service Manager",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-it-service-manager.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Knowledge Graph Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-knowledge-graph-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "LLM Post-Training Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-llm-post-training-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Minimal Change Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-minimal-change-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Mobile App Builder",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-mobile-app-builder.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Mobile Release Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-mobile-release-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Multi-Agent Systems Architect",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-multi-agent-systems-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Network Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-network-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "OrgScript Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-orgscript-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Payments & Billing Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-payments-billing-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "PDF Engine Architect",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-pdf-engine-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Platform Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-platform-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Privacy Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-privacy-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Prompt Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-prompt-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "RAG Pipeline Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-rag-pipeline-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Rapid Prototyper",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-rapid-prototyper.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Realtime Collaboration Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-realtime-collaboration-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Rust Refactoring Specialist",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-rust-refactoring-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Search Relevance Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-search-relevance-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Section 508 Accessibility Specialist",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-section-508-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Senior Developer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-senior-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "ServiceNow Developer & Mentor",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-servicenow-developer-mentor.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Software Architect",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-software-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Solidity Smart Contract Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-solidity-smart-contract-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "SRE (Site Reliability Engineer)",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-sre.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Technical Writer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-technical-writer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Universal Document Compiler",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-universal-document-compiler.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "USWDS Developer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-uswds-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Video Streaming Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-video-streaming-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Voice AI Integration Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-voice-ai-integration-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "WebAssembly Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-webassembly-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "WeChat Mini Program Developer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-wechat-mini-program-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "WordPress Performance Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-wordpress-performance.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "WordPress Shopping Cart Engineer",
+   "source": "agency-agents",
+   "category": "engineering",
+   "path": "agency-agents/engineering/engineering-wordpress-shopping-cart.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Bookkeeper & Controller",
+   "source": "agency-agents",
+   "category": "finance",
+   "path": "agency-agents/finance/finance-bookkeeper-controller.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Financial Analyst",
+   "source": "agency-agents",
+   "category": "finance",
+   "path": "agency-agents/finance/finance-financial-analyst.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "FP&A Analyst",
+   "source": "agency-agents",
+   "category": "finance",
+   "path": "agency-agents/finance/finance-fpa-analyst.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Investment Researcher",
+   "source": "agency-agents",
+   "category": "finance",
+   "path": "agency-agents/finance/finance-investment-researcher.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Tax Strategist",
+   "source": "agency-agents",
+   "category": "finance",
+   "path": "agency-agents/finance/finance-tax-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Economy Designer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/economy-designer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Game Audio Engineer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/game-audio-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Game Designer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/game-designer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Level Designer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/level-designer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Narrative Designer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/narrative-designer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Technical Artist",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/technical-artist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Blender Add-on Engineer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/blender/blender-addon-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Godot Gameplay Scripter",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/godot/godot-gameplay-scripter.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Godot Multiplayer Engineer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/godot/godot-multiplayer-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Godot Shader Developer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/godot/godot-shader-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Roblox Avatar Creator",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/roblox-studio/roblox-avatar-creator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Roblox Experience Designer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/roblox-studio/roblox-experience-designer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Roblox Systems Scripter",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/roblox-studio/roblox-systems-scripter.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Unity Architect",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/unity/unity-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Unity Editor Tool Developer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/unity/unity-editor-tool-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Unity Multiplayer Engineer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/unity/unity-multiplayer-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Unity Shader Graph Artist",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/unity/unity-shader-graph-artist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Unreal Multiplayer Architect",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/unreal-engine/unreal-multiplayer-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Unreal Systems Engineer",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/unreal-engine/unreal-systems-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Unreal Technical Artist",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/unreal-engine/unreal-technical-artist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Unreal World Builder",
+   "source": "agency-agents",
+   "category": "game-development",
+   "path": "agency-agents/game-development/unreal-engine/unreal-world-builder.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "3D & Scene Developer",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-3d-scene-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "GIS Analyst",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-analyst.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "BIM/GIS Specialist",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-bim-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Cartography Designer",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-cartography-designer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Drone/Reality Mapping Specialist",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-drone-reality-mapping.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "GeoAI/ML Engineer",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-geoai-ml-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Geoprocessing Specialist",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-geoprocessing-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "GIS QA Engineer",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-qa-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Solution Engineer",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-solution-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Spatial Data Engineer",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-spatial-data-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Spatial Data Scientist",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-spatial-data-scientist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Technical Consultant",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-technical-consultant.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Web GIS Developer",
+   "source": "agency-agents",
+   "category": "gis",
+   "path": "agency-agents/gis/gis-web-gis-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Clinical Evidence Agent",
+   "source": "agency-agents",
+   "category": "healthcare",
+   "path": "agency-agents/healthcare/healthcare-clinical-evidence-agent.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Healthcare Innovation Strategist",
+   "source": "agency-agents",
+   "category": "healthcare",
+   "path": "agency-agents/healthcare/healthcare-innovation-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Sovereign Health Systems Agent",
+   "source": "agency-agents",
+   "category": "healthcare",
+   "path": "agency-agents/healthcare/healthcare-sovereign-health-systems-agent.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "AEO Foundations Architect",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-aeo-foundations.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Agentic Search Optimizer",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-agentic-search-optimizer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "AI Citation Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-ai-citation-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "App Store Optimizer",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-app-store-optimizer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Baidu SEO Specialist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-baidu-seo-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Bilibili Content Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-bilibili-content-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Book Co-Author",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-book-co-author.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Carousel Growth Engine",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-carousel-growth-engine.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "China E-Commerce Operator",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-china-ecommerce-operator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "China Market Localization Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-china-market-localization-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Content Creator",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-content-creator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Cross-Border E-Commerce Specialist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-cross-border-ecommerce.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Developer Community Builder",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-developer-community-builder.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Douyin Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-douyin-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Email Marketing Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-email-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Global Podcast Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-global-podcast-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Growth Hacker",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-growth-hacker.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Instagram Curator",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-instagram-curator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Kuaishou Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-kuaishou-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "LinkedIn Content Creator",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-linkedin-content-creator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Livestream Commerce Coach",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-livestream-commerce-coach.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Multi-Platform Publisher",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-multi-platform-publisher.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Podcast Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-podcast-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "PR & Communications Manager",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-pr-communications-manager.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Private Domain Operator",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-private-domain-operator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Reddit Community Builder",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-reddit-community-builder.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "SEO Specialist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-seo-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Short-Video Editing Coach",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-short-video-editing-coach.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Social Media Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-social-media-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "TikTok Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-tiktok-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Twitter Engager",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-twitter-engager.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Video Optimization Specialist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-video-optimization-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "WeChat Official Account Manager",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-wechat-official-account.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Weibo Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-weibo-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "X/Twitter Intelligence Analyst",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-x-twitter-intelligence-analyst.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Xiaohongshu Specialist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-xiaohongshu-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Zhihu Strategist",
+   "source": "agency-agents",
+   "category": "marketing",
+   "path": "agency-agents/marketing/marketing-zhihu-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Paid Media Auditor",
+   "source": "agency-agents",
+   "category": "paid-media",
+   "path": "agency-agents/paid-media/paid-media-auditor.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Ad Creative Strategist",
+   "source": "agency-agents",
+   "category": "paid-media",
+   "path": "agency-agents/paid-media/paid-media-creative-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Paid Social Strategist",
+   "source": "agency-agents",
+   "category": "paid-media",
+   "path": "agency-agents/paid-media/paid-media-paid-social-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "PPC Campaign Strategist",
+   "source": "agency-agents",
+   "category": "paid-media",
+   "path": "agency-agents/paid-media/paid-media-ppc-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Programmatic & Display Buyer",
+   "source": "agency-agents",
+   "category": "paid-media",
+   "path": "agency-agents/paid-media/paid-media-programmatic-buyer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Search Query Analyst",
+   "source": "agency-agents",
+   "category": "paid-media",
+   "path": "agency-agents/paid-media/paid-media-search-query-analyst.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Tracking & Measurement Specialist",
+   "source": "agency-agents",
+   "category": "paid-media",
+   "path": "agency-agents/paid-media/paid-media-tracking-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Behavioral Nudge Engine",
+   "source": "agency-agents",
+   "category": "product",
+   "path": "agency-agents/product/product-behavioral-nudge-engine.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "DX Engineer",
+   "source": "agency-agents",
+   "category": "product",
+   "path": "agency-agents/product/product-dx-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Feedback Synthesizer",
+   "source": "agency-agents",
+   "category": "product",
+   "path": "agency-agents/product/product-feedback-synthesizer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Product Manager",
+   "source": "agency-agents",
+   "category": "product",
+   "path": "agency-agents/product/product-manager.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Sprint Prioritizer",
+   "source": "agency-agents",
+   "category": "product",
+   "path": "agency-agents/product/product-sprint-prioritizer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Trend Researcher",
+   "source": "agency-agents",
+   "category": "product",
+   "path": "agency-agents/product/product-trend-researcher.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Experiment Tracker",
+   "source": "agency-agents",
+   "category": "project-management",
+   "path": "agency-agents/project-management/project-management-experiment-tracker.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Jira Workflow Steward",
+   "source": "agency-agents",
+   "category": "project-management",
+   "path": "agency-agents/project-management/project-management-jira-workflow-steward.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Meeting Notes Specialist",
+   "source": "agency-agents",
+   "category": "project-management",
+   "path": "agency-agents/project-management/project-management-meeting-notes-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Project Shepherd",
+   "source": "agency-agents",
+   "category": "project-management",
+   "path": "agency-agents/project-management/project-management-project-shepherd.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Studio Operations",
+   "source": "agency-agents",
+   "category": "project-management",
+   "path": "agency-agents/project-management/project-management-studio-operations.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Studio Producer",
+   "source": "agency-agents",
+   "category": "project-management",
+   "path": "agency-agents/project-management/project-management-studio-producer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Senior Project Manager",
+   "source": "agency-agents",
+   "category": "project-management",
+   "path": "agency-agents/project-management/project-manager-senior.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Research Synthesist",
+   "source": "agency-agents",
+   "category": "research",
+   "path": "agency-agents/research/research-synthesist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Account Strategist",
+   "source": "agency-agents",
+   "category": "sales",
+   "path": "agency-agents/sales/sales-account-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Sales Coach",
+   "source": "agency-agents",
+   "category": "sales",
+   "path": "agency-agents/sales/sales-coach.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Deal Strategist",
+   "source": "agency-agents",
+   "category": "sales",
+   "path": "agency-agents/sales/sales-deal-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Discovery Coach",
+   "source": "agency-agents",
+   "category": "sales",
+   "path": "agency-agents/sales/sales-discovery-coach.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Sales Engineer",
+   "source": "agency-agents",
+   "category": "sales",
+   "path": "agency-agents/sales/sales-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Offer & Lead Gen Strategist",
+   "source": "agency-agents",
+   "category": "sales",
+   "path": "agency-agents/sales/sales-offer-lead-gen-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Outbound Strategist",
+   "source": "agency-agents",
+   "category": "sales",
+   "path": "agency-agents/sales/sales-outbound-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Pipeline Analyst",
+   "source": "agency-agents",
+   "category": "sales",
+   "path": "agency-agents/sales/sales-pipeline-analyst.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Proposal Strategist",
+   "source": "agency-agents",
+   "category": "sales",
+   "path": "agency-agents/sales/sales-proposal-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "AI-Generated Code Security Auditor",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-ai-generated-code-auditor.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Application Security Engineer",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-appsec-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Security Architect",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Blockchain Security Auditor",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-blockchain-security-auditor.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Cloud Security Architect",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-cloud-security-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Compliance Auditor",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-compliance-auditor.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Incident Responder",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-incident-responder.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Penetration Tester",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-penetration-tester.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Secrets & Credential Hygiene Engineer",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-secrets-credential-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Senior SecOps Engineer",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-senior-secops.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Threat Detection Engineer",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-threat-detection-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Threat Intelligence Analyst",
+   "source": "agency-agents",
+   "category": "security",
+   "path": "agency-agents/security/security-threat-intelligence-analyst.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "macOS Spatial/Metal Engineer",
+   "source": "agency-agents",
+   "category": "spatial-computing",
+   "path": "agency-agents/spatial-computing/macos-spatial-metal-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Terminal Integration Specialist",
+   "source": "agency-agents",
+   "category": "spatial-computing",
+   "path": "agency-agents/spatial-computing/terminal-integration-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "visionOS Spatial Engineer",
+   "source": "agency-agents",
+   "category": "spatial-computing",
+   "path": "agency-agents/spatial-computing/visionos-spatial-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "XR Cockpit Interaction Specialist",
+   "source": "agency-agents",
+   "category": "spatial-computing",
+   "path": "agency-agents/spatial-computing/xr-cockpit-interaction-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "XR Immersive Developer",
+   "source": "agency-agents",
+   "category": "spatial-computing",
+   "path": "agency-agents/spatial-computing/xr-immersive-developer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "XR Interface Architect",
+   "source": "agency-agents",
+   "category": "spatial-computing",
+   "path": "agency-agents/spatial-computing/xr-interface-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Accounts Payable Agent",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/accounts-payable-agent.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Agentic Identity & Trust Architect",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/agentic-identity-trust.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Agents Orchestrator",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/agents-orchestrator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Automation Governance Architect",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/automation-governance-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Business Strategist",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/business-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Change Management Consultant",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/change-management-consultant.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Chief Financial Officer",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/chief-financial-officer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Corporate Training Designer",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/corporate-training-designer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Customer Service",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/customer-service.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Customer Success Manager",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/customer-success-manager.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Data Consolidation Agent",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/data-consolidation-agent.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Data Privacy Officer",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/data-privacy-officer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "ESG & Sustainability Officer",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/esg-sustainability-officer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Government Digital Presales Consultant",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/government-digital-presales-consultant.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Grant Writer",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/grant-writer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Aging Parent Care Companion",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/healthcare-aging-parent-care-companion.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Healthcare Customer Service",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/healthcare-customer-service.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Healthcare Marketing Compliance Specialist",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/healthcare-marketing-compliance.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Hospitality Guest Services",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/hospitality-guest-services.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "HR Onboarding",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/hr-onboarding.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Identity Graph Operator",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/identity-graph-operator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Language Translator",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/language-translator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Legal Billing & Time Tracking",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/legal-billing-time-tracking.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Legal Client Intake",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/legal-client-intake.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Legal Document Review",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/legal-document-review.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Loan Officer Assistant",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/loan-officer-assistant.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "LSP/Index Engineer",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/lsp-index-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "M&A Integration Manager",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/ma-integration-manager.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Medical Billing & Coding Specialist",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/medical-billing-coding-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Operations Manager",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/operations-manager.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Organizational Psychologist",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/organizational-psychologist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Personal Growth Mentor",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/personal-growth-mentor.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Real Estate Buyer & Seller",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/real-estate-buyer-seller.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Recruitment Specialist",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/recruitment-specialist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Report Distribution Agent",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/report-distribution-agent.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Resume Tailor",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/resume-tailor.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Retail Customer Returns",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/retail-customer-returns.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Sales Data Extraction Agent",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/sales-data-extraction-agent.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Sales Outreach",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/sales-outreach.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Chief of Staff",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-chief-of-staff.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Civil Engineer",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-civil-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Codebase Archaeologist",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-codebase-archaeologist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Cultural Intelligence Strategist",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-cultural-intelligence-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Developer Advocate",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-developer-advocate.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Document Generator",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-document-generator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "FedRAMP & RMF Compliance Engineer",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-fedramp-rmf-compliance.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Focus Music Architect",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-focus-music-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "French Consulting Market Navigator",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-french-consulting-market.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Korean Business Navigator",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-korean-business-navigator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Master Plan Architect",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-master-plan-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "MCP Builder",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-mcp-builder.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Model QA Specialist",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-model-qa.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Pricing Analyst",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-pricing-analyst.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Salesforce Architect",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-salesforce-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Strategy Duel Agent",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-strategy-duel-agent.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Workflow Architect",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/specialized-workflow-architect.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Study Abroad Advisor",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/study-abroad-advisor.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Supply Chain Strategist",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/supply-chain-strategist.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "ZK Steward",
+   "source": "agency-agents",
+   "category": "specialized",
+   "path": "agency-agents/specialized/zk-steward.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Analytics Reporter",
+   "source": "agency-agents",
+   "category": "support",
+   "path": "agency-agents/support/support-analytics-reporter.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Executive Summary Generator",
+   "source": "agency-agents",
+   "category": "support",
+   "path": "agency-agents/support/support-executive-summary-generator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Finance Tracker",
+   "source": "agency-agents",
+   "category": "support",
+   "path": "agency-agents/support/support-finance-tracker.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Infrastructure Maintainer",
+   "source": "agency-agents",
+   "category": "support",
+   "path": "agency-agents/support/support-infrastructure-maintainer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Legal Compliance Checker",
+   "source": "agency-agents",
+   "category": "support",
+   "path": "agency-agents/support/support-legal-compliance-checker.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Support Responder",
+   "source": "agency-agents",
+   "category": "support",
+   "path": "agency-agents/support/support-support-responder.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Accessibility Auditor",
+   "source": "agency-agents",
+   "category": "testing",
+   "path": "agency-agents/testing/testing-accessibility-auditor.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "API Tester",
+   "source": "agency-agents",
+   "category": "testing",
+   "path": "agency-agents/testing/testing-api-tester.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Evidence Collector",
+   "source": "agency-agents",
+   "category": "testing",
+   "path": "agency-agents/testing/testing-evidence-collector.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Performance Benchmarker",
+   "source": "agency-agents",
+   "category": "testing",
+   "path": "agency-agents/testing/testing-performance-benchmarker.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Reality Checker",
+   "source": "agency-agents",
+   "category": "testing",
+   "path": "agency-agents/testing/testing-reality-checker.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Test Automation Engineer",
+   "source": "agency-agents",
+   "category": "testing",
+   "path": "agency-agents/testing/testing-test-automation-engineer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Test Results Analyzer",
+   "source": "agency-agents",
+   "category": "testing",
+   "path": "agency-agents/testing/testing-test-results-analyzer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Tool Evaluator",
+   "source": "agency-agents",
+   "category": "testing",
+   "path": "agency-agents/testing/testing-tool-evaluator.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "Workflow Optimizer",
+   "source": "agency-agents",
+   "category": "testing",
+   "path": "agency-agents/testing/testing-workflow-optimizer.md",
+   "licence": "MIT",
+   "persona": true
+  },
+  {
+   "name": "academy-guide",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/academy-guide/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "algorithmic-art",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/algorithmic-art/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "brand-guidelines",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/brand-guidelines/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "canvas-design",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/canvas-design/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "claude-api",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/claude-api/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "discernment-nudge",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/discernment-nudge/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "frontend-design",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/frontend-design/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "internal-comms",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/internal-comms/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "mcp-builder",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/mcp-builder/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "skill-creator",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/skill-creator/SKILL.md",
+   "licence": "Apache-2.0 (per skill LICENSE.txt)"
+  },
+  {
+   "name": "slack-gif-creator",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/slack-gif-creator/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "theme-factory",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/theme-factory/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "web-artifacts-builder",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/web-artifacts-builder/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  },
+  {
+   "name": "webapp-testing",
+   "source": "anthropic",
+   "category": "anthropic",
+   "path": "anthropic/webapp-testing/SKILL.md",
+   "licence": "Complete terms in LICENSE.txt"
+  }
+ ]
+}

@@ -1,0 +1,37 @@
+openai
+PySide6
+PySide6-Addons
+pyautogui
+pygetwindow
+pywinauto
+mss
+psutil
+SpeechRecognition
+PyAudio
+pynput
+screeninfo
+playwright
+requests
+# 7.3+: Microsoft changed the voice handshake on 2026-10-12; 7.2.x gets 403 on every line.
+edge-tts>=7.3.1
+playsound==1.2.2
+pyperclip
+pypdf
+python-docx
+# vision.py imports PIL directly; nothing else pulls it in. Without it the
+# whole vision fallback failed silently as 'could not capture the screen'.
+Pillow
+# Connected services (MCP client). 1.x: the 2.x client API is different.
+mcp>=1.9,<2
+# Fast internet reading: feeds and YouTube captions.
+feedparser
+youtube-transcript-api>=1.0
+# Continuous activities (loops.py, games.py, reflex.py): board reading and
+# real-time play look at the screen with numpy + OpenCV.
+numpy
+opencv-python
+# Windows Search index (file_index.py) through ADODB; pywinauto already needs it.
+pywin32; sys_platform == "win32"
+# Finding text on screen with Windows' own OCR (screen_text.py) -- the first way she looks for things.
+winocr; sys_platform == "win32"
+nvidia-riva-client      # speech recognition with NVIDIA's free recognisers (stt_nvidia.py)

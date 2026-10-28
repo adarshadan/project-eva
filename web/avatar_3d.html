@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* Direct sizing, matching the Qt widget/view exactly. The previous
+     CSS-transform + oversized-internal-canvas approach didn't fix the
+     cropping either -- the real, standard omission was
+     renderer.setPixelRatio() below: without it, Three.js assumes a 1x
+     display regardless of actual Windows display scaling (125%/150%/etc,
+     very common), which mismatches the canvas's CSS size against what
+     Chromium actually renders, and reads exactly as "need to zoom out to
+     see the whole thing". */
+  html, body { margin:0; padding:0; background: transparent; overflow: hidden; width: 100vw; height: 100vh; }
+  canvas { display:block; background: transparent; }
+</style>
+</head>
+<body>
+<!-- ES modules via import map: the actual current supported way to use
+     Three.js loaders. Global-script builds (examples/js/*.js attaching to
+     window.THREE) have been unreliable across recent versions -- this is
+     the stable path Three.js has recommended for years, and QtWebEngine's
+     Chromium is new enough to support import maps natively. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js",
+    "@pixiv/three-vrm-animation": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm-animation@3/lib/three-vrm-animation.module.min.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { VRMLoaderPlugin } from '@pixiv/three-vrm';
+import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
+
+// A "Request object could not be cloned" postMessage error was seen once,
+// specifically loading the Fox model (which had an embedded texture
+// needing worker-based ImageBitmap decoding) -- NOT a general "fetch() is
+// broken in QtWebEngine" problem, despite two earlier attempts here
+// treating it as one. Native fetch() loaded character.glb successfully
+// across many months and dozens of runs before and since (confirmed
+// directly in the log), including for the current Xbot model -- it's the
+// proven-working baseline. Both a prior "delete window.fetch" attempt and
+// a subsequent hand-rolled XHR replacement each broke plain file loading
+// in a NEW way (a ReferenceError, then a file:// CORS failure XHR doesn't
+// get past the way native fetch does here) while never actually fixing
+// the original narrow issue. If the postMessage error recurs with a
+// specific model again, that narrow cause needs addressing directly
+// (e.g. disabling ImageBitmapLoader specifically), not fetch() itself.
+/*
+ Eva's body -- a small hovering robot (rounded white shell, teal accents,
+ glowing cyan eyes) rather than a jointed humanoid: no legs, moves by
+ floating/bobbing/drifting, closer to the reference look and to EVE from
+ WALL-E than a walking figure ever would be.
+
+ Drop a matching rigged/modeled .glb at assets/character.glb (clip names
+ idle/walk/dance/wave/nap/point) to replace this procedural body outright --
+ auto-detected, falls back to this if missing.
+*/
+
+// Initial size matches whatever the actual QWebEngineView is at load
+// time -- no longer a fixed constant, since the window is now resizable
+// (dragging the bottom-right corner, see AvatarWidget.resize_avatar in
+// avatar_ui.py). window.resizeScene() below is what keeps the renderer
+// and camera in sync whenever that happens after load.
+let RENDER_W = window.innerWidth || 175, RENDER_H = window.innerHeight || 238;
+
+const scene = new THREE.Scene();
+// The canvas is a transparent "stage" STAGE_PAD_X/Y times the character's
+// hit box, centred on it (see avatar_ui.py -- values MUST match). An
+// orthographic camera is fitted to the character's MEASURED bounding box
+// so its height maps exactly onto the hit box height, at any window size --
+// no hand-tuned camera numbers to guess at.
+const STAGE_PAD_X = 1.6, STAGE_PAD_Y = 1.15;  // MUST match avatar_ui.py's STAGE_PAD_X/Y
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
+let fitTarget = { cx: 0, cy: 0.25, h: 1.6 };  // replaced by fitCameraTo() once a model exists
+
+function applyCameraFit() {
+  const u = fitTarget.h / (RENDER_H / STAGE_PAD_Y);  // world units per pixel
+  camera.left = -RENDER_W * u / 2; camera.right = RENDER_W * u / 2;
+  camera.top = RENDER_H * u / 2;   camera.bottom = -RENDER_H * u / 2;
+  camera.position.set(fitTarget.cx, fitTarget.cy, 10);
+  camera.lookAt(fitTarget.cx, fitTarget.cy, 0);
+  camera.updateProjectionMatrix();
+}
+
+function fitCameraTo(object3d) {
+  object3d.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object3d);
+  if (box.isEmpty()) return;
+  fitTarget = { cx: (box.min.x + box.max.x) / 2, cy: (box.min.y + box.max.y) / 2,
+                h: box.max.y - box.min.y };
+  applyCameraFit();
+}
+applyCameraFit();
+
+// Render settings from the URL (avatar_ui.py builds it from config.py; the
+// flicker bench, tools/flicker_bench.py, compares them on the real screen):
+//   pdb=1  preserveDrawingBuffer -- the canvas keeps its last image between
+//          draws, so a compositor pass that lands between two frames shows
+//          her instead of an empty buffer (the 2026-10-11 recording showed
+//          her missing in 1-3 frame bursts, ~18% of frames, at idle)
+//   fps=N  how often the scene is drawn (30 default; 60 = every vsync)
+const RENDER_OPTS = (() => {
+  const q = new URLSearchParams(location.search);
+  const fps = parseInt(q.get('fps') || '30', 10);
+  return { pdb: q.get('pdb') !== '0', fps: (fps >= 10 && fps <= 120) ? fps : 30 };
+})();
+const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true,
+                                           preserveDrawingBuffer: RENDER_OPTS.pdb });
+// The actual fix: without this, Three.js renders at devicePixelRatio=1
+// regardless of the real Windows display scale factor, mismatching the
+// canvas's logical CSS size against what actually gets drawn.
+// Full device pixel ratio, capped at 2 only to bound the cost on
+// very-high-DPI displays. A 1.5 cap plus antialias:false was tried while
+// hunting the WebGL context losses; it visibly softened the character,
+// and the losses turned out to have concrete causes since fixed (a
+// fullscreen overlay repainting at 60Hz for the whole session, and
+// per-walk-tick setGeometry on the render window), so the quality cost
+// is no longer justified.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(RENDER_W, RENDER_H);
+renderer.setClearColor(0x000000, 0);
+renderer.outputColorSpace = THREE.SRGBColorSpace; // avoids a muddy/near-black look under standard materials
+document.body.appendChild(renderer.domElement);
+
+// Called from Python (AvatarWidget.resize_avatar) whenever the window is
+// actually resized by the user dragging the corner -- keeps the
+// renderer's pixel size and the camera's aspect ratio in sync with the
+// new window dimensions. Without updateProjectionMatrix() after changing
+// aspect, the camera keeps using its old projection and the scene would
+// look stretched/squashed rather than properly reflowed.
+window.resizeScene = function (width, height) {
+  RENDER_W = width; RENDER_H = height;
+  applyCameraFit();
+  renderer.setSize(width, height);
+};
+// Backup path: if the OS/Chromium fires its own resize (e.g. a display
+// scale change) without an explicit Python-side call, react to it too --
+// belt and suspenders, not the primary mechanism.
+window.addEventListener('resize', () => {
+  window.resizeScene(window.innerWidth, window.innerHeight);
+});
+
+// A GPU driver crash or reset (common around sleep/wake on Windows) can
+// silently kill the WebGL context without killing the whole page or the
+// Chromium renderer process -- the canvas just goes blank while
+// everything else keeps running, since Three.js has no way to know the
+// context died unless told explicitly via this event. Previously there
+// was no handler at all, so this failure mode looked identical to any
+// other "avatar went invisible" case with zero indication of why.
+// preventDefault() is required for 'webglcontextrestored' to ever fire.
+// Recovery strategy: FULL PAGE RELOAD, not an in-place patch-up. A context
+// loss destroys ALL GPU-side resources -- textures, geometry buffers, AND
+// compiled shader programs -- and Three.js has no API to re-upload them
+// all in place; flagging materials needsUpdate (tried previously) misses
+// the geometry/shader loss entirely. A reload rebuilds the whole scene
+// from local assets in about a second -- the same strategy already used
+// on the Python side for renderer-process crashes.
+let webglReloadPending = false;
+function scheduleWebglReload() {
+  if (webglReloadPending) return;
+  webglReloadPending = true;
+  // Crash-loop guard: a context dying almost immediately after startup
+  // means auto-reloading would hammer the GPU in a tight cycle forever --
+  // left for the next manual launch instead.
+  if (performance.now() < 10000) {
+    console.error('WebGL context lost too soon after startup -- not auto-reloading (crash-loop guard).');
+    return;
+  }
+  // Cross-reload rate limit: a GPU/driver that keeps killing the context
+  // would otherwise become an endless blank-and-reappear flicker loop
+  // (each reload is itself visible as a flicker). At most 3 reloads per 5
+  // minutes; beyond that the scene is left as-is rather than flickering
+  // indefinitely -- restarting Eva is the correct recovery at that point.
+  let history = [];
+  try { history = JSON.parse(sessionStorage.getItem('webglReloads') || '[]'); } catch (e) {}
+  const now = Date.now();
+  history = history.filter(ts => now - ts < 5 * 60 * 1000);
+  if (history.length >= 3) {
+    console.error('WebGL context lost again -- reload limit reached, not reloading to avoid an endless flicker loop. Restart Eva to recover.');
+    return;
+  }
+  history.push(now);
+  try { sessionStorage.setItem('webglReloads', JSON.stringify(history)); } catch (e) {}
+  setTimeout(() => location.reload(), 1000);
+}
+renderer.domElement.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  console.error('WebGL context lost -- reloading the avatar scene to recover.');
+  scheduleWebglReload();
+}, false);
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  // Even once the driver hands the context back, every GPU resource is
+  // still gone -- reload for a clean rebuild rather than patching a
+  // broken scene in place.
+  console.log('WebGL context restored -- reloading scene for a clean rebuild.');
+  scheduleWebglReload();
+}, false);
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 0.9);
+key.position.set(2, 4, 3);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xbfe9ff, 0.45);
+rim.position.set(-2, 1, -2);
+scene.add(rim);
+
+const bot = new THREE.Group();
+
+// ---- body: MeshStandardMaterial (not Physical/clearcoat) -- clearcoat
+// needs WebGL2 extensions that often silently fail or render near-black
+// under constrained/software GPU contexts, which is what a flat dark blob
+// with no visible color usually means. Standard material is far safer here.
+const shellMat = new THREE.MeshStandardMaterial({ color: 0xf3f6fa, roughness: 0.4, metalness: 0.05 });
+const tealMat = new THREE.MeshStandardMaterial({ color: 0x2ec4c6, roughness: 0.4, metalness: 0.1 });
+const visorMat = new THREE.MeshStandardMaterial({ color: 0x123049, roughness: 0.3, metalness: 0.15 });
+const eyeMat = new THREE.MeshStandardMaterial({
+  color: 0x8fe9ff, emissive: 0x4fd8ff, emissiveIntensity: 1.4, roughness: 0.3
+});
+
+const body = new THREE.Mesh(new THREE.SphereGeometry(0.62, 32, 32), shellMat);
+body.scale.set(1, 0.92, 0.95);
+bot.add(body);
+
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), shellMat);
+head.position.y = 0.78;
+head.scale.set(1, 0.88, 0.9);
+bot.add(head);
+
+const visor = new THREE.Mesh(new THREE.SphereGeometry(0.38, 24, 24, 0, Math.PI * 2, 0, Math.PI * 0.65), visorMat);
+visor.position.set(0, 0.8, 0.28);
+visor.rotation.x = Math.PI * 0.5;
+bot.add(visor);
+
+// eyes: soft glowing crescents (half-torus arcs)
+function makeEye(x) {
+  const g = new THREE.Group();
+  const arc = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.028, 12, 24, Math.PI), eyeMat);
+  arc.rotation.z = Math.PI; // smiling crescent orientation
+  g.add(arc);
+  g.position.set(x, 0.82, 0.52);
+  return g;
+}
+const leftEye = makeEye(-0.16);
+const rightEye = makeEye(0.16);
+bot.add(leftEye, rightEye);
+const eyeGlow = new THREE.PointLight(0x6fe0ff, 0.6, 1.5);
+eyeGlow.position.set(0, 0.82, 0.6);
+bot.add(eyeGlow);
+
+// ear fins
+function makeFin(x) {
+  const fin = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.32, 4), tealMat);
+  fin.position.set(x, 0.95, -0.05);
+  fin.rotation.z = x < 0 ? 0.35 : -0.35;
+  fin.rotation.x = -0.2;
+  return fin;
+}
+const leftFin = makeFin(-0.42);
+const rightFin = makeFin(0.42);
+bot.add(leftFin, rightFin);
+
+// chin marking
+const chin = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.14, 3), tealMat);
+chin.position.set(0, 0.42, 0.42);
+chin.rotation.x = Math.PI;
+bot.add(chin);
+
+// small stub arms (no elbows -- floating nubs, WALL-E/EVE style)
+function makeArm(x) {
+  return new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.25, 4, 8), shellMat).translateX(x).translateY(-0.05);
+}
+const leftArm = makeArm(-0.68);
+const rightArm = makeArm(0.68);
+leftArm.rotation.z = 0.5;
+rightArm.rotation.z = -0.5;
+bot.add(leftArm, rightArm);
+
+bot.position.y = -0.55;
+scene.add(bot);
+// 2026-10-28 "I don't need the fallback character to show up on boot": the stand-in stays hidden while her
+// model loads (2-4 s) and appears only if the model cannot be loaded at all.
+bot.visible = false;
+fitCameraTo(bot);
+
+// ---- optional rigged GLB override ----
+let gltfMixer = null, gltfClips = {}, usingGltf = false, activeGltfAction = null;
+
+// This is a VRM 0.x file (confirmed: extensions.VRM present, not
+// VRMC_vrm) -- VRM 0.x models face -Z (backward) by spec convention,
+// corrected VRM 1.0 onward to +Z. VRMUtils.rotateVRM0() is the official
+// three-vrm utility for this exact case; skipping it means the character
+// loads facing directly away from the camera.
+import { VRMUtils } from '@pixiv/three-vrm';
+
+// character.glb is this VRM file (VRoid Project's official
+// "AvatarSample_B", explicitly licensed for commercial use, modification,
+// and redistribution with no credit required -- see web/assets/README.md)
+// -- it has ZERO baked-in animation clips itself. VRM is a character
+// MODEL format (mesh + skeleton + facial expressions + hair/cloth
+// physics), not an animated-clip format. Real gestures instead come from
+// the separate VRMA (VRM Animation) files in web/assets/vrma/ -- VRoid
+// Project's own official free motion pack, which DOES require credit on
+// commercial use (see web/assets/README.md for the exact required
+// phrase) -- unlike the character model itself, which needs none.
+//
+// The pack has 7 one-shot clips. What each one ACTUALLY shows was established
+// by rendering every clip at 8 points in time (2026-10-10) -- several of the
+// old names were wrong, which is why "do a squat" played an arm stretch and a
+// window minimise played a crouch-and-jump:
+//   VRMA_01  twirl       arms out, a full turn to show the outfit, back to front
+//   VRMA_02  hello       starts CROUCHED, springs up, waves both hands (excited hello)
+//   VRMA_03  peace       a peace sign held beside the face
+//   VRMA_04  finger_gun  finger to the temple, then a finger-gun upward
+//   VRMA_05  spin_pose   turns round and strikes a pose
+//   VRMA_06  model_pose  hands on hips, model stances
+//   VRMA_07  stretch     arm stretches: arms out wide, then across the body
+// These are PLAYFUL clips: they play when the person asks for them, or when
+// she is idle. They are never used for desktop work -- clicking, minimising,
+// arranging and so on have their own procedural motions below, which mean
+// the action they accompany.
+const ANIM_MAP = {
+  // asked-for gestures -> the clip that really shows them
+  wave: "p_wave", hello: "hello", greeting: "hello", excited: "hello",
+  dance: "spin_pose", spin: "spin_pose", twirl: "twirl", show_off: "twirl",
+  peace: "peace", pose: "model_pose", model_pose: "model_pose", modelpose: "model_pose",
+  stretch: "stretch", exercise: "stretch", finger_gun: "finger_gun", shoot: "finger_gun",
+  // gestures with no clip -> purpose-built procedural motions
+  squat: "p_squat", crouch: "p_squat", jump: "p_hop", hop: "p_hop", bow: "p_bow", nod: "p_nod", think: "p_think",
+  shrug: "p_shrug", cheer: "p_cheer", point: "p_point_r", beckon: "p_beckon",
+  yawn: "p_yawn", big_stretch: "p_stretch_up", look_around: "p_look_around",
+  clap: "p_clap", applause: "p_clap", facepalm: "p_facepalm", oops: "p_facepalm", heart: "p_heart",
+  shh: "p_shh", quiet: "p_shh", check_watch: "p_check_watch", watch: "p_check_watch",
+  impatient: "p_impatient", tap_foot: "p_impatient", scratch_head: "p_scratch_head", confused: "p_scratch_head",
+  peer: "p_peer", look_closely: "p_peer", carry: "p_carry", paper_plane: "p_paper_plane", throw: "p_paper_plane",
+  wipe_brow: "p_wipe_brow", phew: "p_wipe_brow", fist_pump: "p_fist_pump", yes: "p_fist_pump", tada: "p_tada",
+  salute: "p_salute", tap_head: "p_tap_head", noted: "p_tap_head", sneeze: "p_sneeze", hum: "p_hum", sway: "p_hum",
+  shoo: "p_shoo", rewind: "p_rewind", checklist: "p_checklist",
+  // desktop work -> a motion that means the action
+  click: "p_reach_r", tidy: "p_tidy", arrange: "p_arrange", work: "p_type", delegate: "p_delegate",
+  // held states, driven by the activity controller
+  fly_loop: "__procedural_hover", nap: "__procedural_nap",
+};
+// VRMA files, keyed by what they show.
+const VRMA_FILES = {
+  twirl: "assets/vrma/VRMA_01.vrma",
+  hello: "assets/vrma/VRMA_02.vrma",
+  peace: "assets/vrma/VRMA_03.vrma",
+  finger_gun: "assets/vrma/VRMA_04.vrma",
+  spin_pose: "assets/vrma/VRMA_05.vrma",
+  model_pose: "assets/vrma/VRMA_06.vrma",
+  stretch: "assets/vrma/VRMA_07.vrma",
+};
+// Where to start a clip (seconds). "hello" begins crouched on the floor; from
+// a standing pose that read as collapsing, so it starts as she springs up.
+const CLIP_START = { hello: 2.4 };
+
+// VRM's blend-shape-based facial expressions ARE genuinely available here
+// (Neutral/Angry/Fun/Joy/Sorrow/Surprised/blink, unlike the previous two
+// models which had none at all) -- driven through vrm.expressionManager,
+// three-vrm's own proper API for this, rather than poking
+// morphTargetInfluences directly. Exact resulting expression names after
+// three-vrm's VRM0->VRM1 preset normalization aren't fully predictable
+// without live testing, so this tries a short list of plausible aliases
+// per mood and applies whichever one actually exists on this model,
+// silently skipping the rest.
+let vrmInstance = null;
+let morphMeshes = [];  // fallback path for a non-VRM GLTF with raw morph targets
+// True while a real VRMA gesture clip is actively playing -- the manual
+// arm-lowering/breathing-sway pose in tick() must NOT run at the same
+// time, or it would fight the real animation's own bone rotations every
+// single frame and corrupt it into a jittering mess.
+let vrmGestureActive = false;
+
+const EXPRESSION_ALIASES = {
+  Surprised: ['surprised', 'Surprised'],
+  Sad: ['sad', 'sorrow', 'Sad'],
+};
+
+function setExpression(name, weight) {
+  if (vrmInstance && vrmInstance.expressionManager) {
+    const em = vrmInstance.expressionManager;
+    // Clear every alias in our whole table first, not just today's mood --
+    // otherwise switching from "Sad" to "Surprised" would leave the old
+    // expression's weight stuck alongside the new one.
+    Object.values(EXPRESSION_ALIASES).flat().forEach(n => {
+      if (em.getExpression(n)) em.setValue(n, 0);
+    });
+    const candidates = EXPRESSION_ALIASES[name] || [name];
+    for (const candidate of candidates) {
+      if (em.getExpression(candidate)) {
+        em.setValue(candidate, weight);
+        break;
+      }
+    }
+    return;
+  }
+  morphMeshes.forEach(mesh => {
+    const dict = mesh.morphTargetDictionary;
+    if (!dict) return;
+    Object.keys(dict).forEach(key => {
+      mesh.morphTargetInfluences[dict[key]] = (key === name) ? weight : 0;
+    });
+  });
+}
+window.setExpression = setExpression;
+
+(async () => {
+  try {
+    const loader = new GLTFLoader();
+    loader.register((parser) => new VRMLoaderPlugin(parser));
+    const gltf = await loader.loadAsync('assets/character.glb');
+    const vrm = gltf.userData.vrm;
+    if (vrm) {
+      scene.remove(bot);
+      VRMUtils.rotateVRM0(vrm);  // VRM 0.x-specific fix -- see the import comment above
+      // This VRM's own bounding box is ~1.57 units tall -- already
+      // human/meter scale like Xbot was, not the Fox's ~79-unit mesh, so
+      // only a light adjustment is needed here, not a drastic correction.
+      scene.add(vrm.scene);
+      fitCameraTo(vrm.scene);  // framing computed from the model's real size
+      vrmInstance = vrm;
+      { const h = vrm.humanoid.getNormalizedBoneNode('hips'); if (h) restHipsPos = h.position.clone(); }
+      usingGltf = true;
+      gltfMixer = new THREE.AnimationMixer(vrm.scene);
+      // Hands control back to the manual rest-pose code in tick() the
+      // moment a one-shot gesture actually finishes playing (see
+      // playClip's LoopOnce/clampWhenFinished above) -- without this,
+      // vrmGestureActive would stay stuck true forever after the first
+      // gesture, permanently disabling the rest-pose/breathing code.
+      gltfMixer.addEventListener('finished', endVrmGesture);
+      console.log('character.glb (VRM) loaded, 0 baked clips as expected -- loading VRMA gestures separately...');
+
+      // VRMA files need their OWN GLTFLoader with a different plugin
+      // registered, and each one must be converted via
+      // createVRMAnimationClip(vrmAnimation, vrm) -- the conversion is
+      // what actually retargets the generic VRMA motion onto THIS
+      // specific model's skeleton, so it can only happen after vrm above
+      // is fully loaded, not before.
+      const vrmaLoader = new GLTFLoader();
+      vrmaLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+      const entries = Object.entries(VRMA_FILES);
+      const results = await Promise.allSettled(entries.map(([, path]) => vrmaLoader.loadAsync(path)));
+      results.forEach((result, i) => {
+        const [key] = entries[i];
+        if (result.status === 'fulfilled') {
+          const vrmAnimation = result.value.userData.vrmAnimations?.[0];
+          if (vrmAnimation) {
+            gltfClips[key] = createVRMAnimationClip(vrmAnimation, vrm);
+          } else {
+            console.error(`VRMA "${key}" loaded but contained no animation data.`);
+          }
+        } else {
+          console.error(`VRMA "${key}" failed to load:`, result.reason && result.reason.message);
+        }
+      });
+      console.log('VRMA gestures loaded:', Object.keys(gltfClips).join(', ') || '(none)');
+      window.EVA_READY = true;   // the model and its clips are in (tools/flicker_bench.py waits for this)
+    } else {
+      // Not a VRM -- a plain GLTF/GLB (Xbot, RobotExpressive, Fox, or
+      // whatever else might replace this file later). Falls back to the
+      // original clip-based path so swapping the file type back doesn't
+      // require reverting this code.
+      scene.remove(bot);
+      const model = gltf.scene;
+      scene.add(model);
+      fitCameraTo(model);
+      gltfMixer = new THREE.AnimationMixer(model);
+      gltf.animations.forEach(clip => { gltfClips[clip.name] = clip; });
+      model.traverse(o => { if (o.isMesh && o.morphTargetDictionary) morphMeshes.push(o); });
+      usingGltf = true;
+      console.log('character.glb loaded:', gltf.animations.length, 'clips');
+    }
+  } catch (e) {
+    console.error('character.glb failed to load, using procedural fallback:', e && e.message);
+    bot.visible = true;
+  }
+})();
+
+let currentAnim = "idle";
+const clock = new THREE.Clock();
+
+// ---------------------------------------------------------------------------
+// MOTION: what her body does, and why it can no longer glitch.
+//
+// One pipeline per frame, each layer with a clear owner:
+//   1. a playing VRMA clip (an asked-for gesture) -- owns the whole skeleton;
+//   2. otherwise the ACTIVITY she is doing (reading, writing, browsing...),
+//      eased so every change flows;
+//   3. a one-shot procedural GESTURE (reach, tidy, nod...) blended over the
+//      activity with an envelope that starts and ends at weight 0;
+//   4. the WALK, blended in and out by its own weight (no slide, no snap);
+//   5. additive head layers: gaze and talking;
+//   6. a CROSSFADE layer: whenever a clip starts or stops, the pose she was
+//      in is captured and the new pose is blended from it over a few tenths
+//      of a second, for every bone -- so nothing ever jumps.
+//
+// Axes were MEASURED by rendering the rig (three-vrm normalized bones of this
+// VRM 0.x model after rotateVRM0), not guessed:
+//   upperArm.rotation.z  + lowers the LEFT arm from the T-pose, - the right
+//   upperArm.rotation.x  + swings either arm FORWARD
+//   upperArm.rotation.y  - turns the left forearm in toward the body, + the right
+//   lowerArm.rotation.y  - bends the LEFT elbow forward, + the right
+//   lowerArm.rotation.z  (arm raised to the side) + lifts the right forearm up, - the left
+//   spine/chest/head rotation.x  + leans BACK / looks UP (so the channels flip it:
+//                        spineX/chestX/headX + mean lean forward / look down)
+//   spine/head rotation.y + turns toward screen-right (her left)
+// ---------------------------------------------------------------------------
+function T(key, dflt) {
+  const v = window.EVA_TUNE && window.EVA_TUNE[key];
+  return (typeof v === 'number' && isFinite(v)) ? v : dflt;
+}
+window.EVA_PROCEDURAL = true; // Python sets this from config.PROCEDURAL_GESTURES
+
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
+const pulse = (p, a, b) => smooth((p - a) / ((b - a) / 2)) * smooth((b - p) / ((b - a) / 2));   // 0..1..0 inside [a,b]
+
+// ---------------------------------------------------------------------------
+// Life layer: the small involuntary things that make a character read as
+// alive -- blinking, a mouth that moves while she speaks, a head that moves a
+// little with her voice. Before this she stood still and talked with a closed
+// mouth. Everything is wrapped: a fault here disables only this layer.
+// Unverified visually (no way to render the rig here); the pose lab
+// (?lab=1) exists so it can be checked and tuned in seconds.
+// ---------------------------------------------------------------------------
+window.EVA_LIFE = true;
+const life = { speaking: false, speakW: 0, mouth: 0, nextBlink: 1.5, blinkStart: -1,
+               doubleBlink: false, gapUntil: 0, nextGap: 1.0 };
+window.setSpeaking = function (on) { life.speaking = !!on; };
+
+function exprName(em, names) {
+  for (const n of names) { if (em.getExpression(n)) return n; }
+  return null;
+}
+function setExpr(em, names, v) {
+  const n = exprName(em, names);
+  if (n) em.setValue(n, Math.max(0, Math.min(1, v)));
+}
+
+function lifeUpdate(t, dt) {
+  if (!window.EVA_LIFE || !vrmInstance || !vrmInstance.expressionManager) return;
+  const em = vrmInstance.expressionManager;
+  try {
+    // -- blink: every 2-6 s, ~0.16 s long, sometimes twice ---------------
+    if (life.blinkStart < 0 && t >= life.nextBlink) {
+      life.blinkStart = t;
+      life.doubleBlink = Math.random() < 0.18;
+    }
+    let blink = 0;
+    if (life.blinkStart >= 0) {
+      const a = (t - life.blinkStart) / 0.16;
+      if (a >= 1) {
+        life.blinkStart = -1;
+        life.nextBlink = t + (life.doubleBlink ? 0.18 : 2.2 + Math.random() * 3.8);
+        life.doubleBlink = false;
+      } else {
+        blink = a < 0.4 ? a / 0.4 : 1 - (a - 0.4) / 0.6;   // quick close, slower open
+      }
+    }
+    setExpr(em, ['blink', 'Blink'], blink);
+
+    // -- mouth: syllable-like movement while she speaks -------------------
+    // The audio plays in another process, so its loudness is not available;
+    // this is a believable envelope (4-6 syllables/s, uneven, with phrase
+    // pauses), not true lip-sync.
+    life.speakW += ((life.speaking ? 1 : 0) - life.speakW) * Math.min(1, dt * 8);
+    let target = 0;
+    if (life.speaking) {
+      if (t >= life.nextGap) { life.gapUntil = t + 0.12 + Math.random() * 0.18; life.nextGap = t + 0.9 + Math.random() * 1.8; }
+      if (t >= life.gapUntil) {
+        const syl = Math.abs(Math.sin(t * Math.PI * (4.2 + 1.3 * Math.sin(t * 0.9))));
+        const varn = 0.6 + 0.4 * Math.sin(t * 1.9 + 0.7);
+        target = syl * varn;
+      }
+    }
+    life.mouth += (target - life.mouth) * Math.min(1, dt * 20);
+    let g = T('MOUTH_GAIN', 1) * life.speakW;
+    if (typeof mouthOverride === 'number' && mouthOverride > life.mouth * g) {   // a yawn, a stretch
+      life.mouth = mouthOverride; g = 1;
+    }
+    setExpr(em, ['aa', 'A', 'a'], life.mouth * 0.62 * g);
+    setExpr(em, ['oh', 'O', 'o'], Math.max(0, Math.sin(t * 5.3)) * life.mouth * 0.22 * g);
+    setExpr(em, ['ih', 'I', 'i'], Math.max(0, Math.sin(t * 6.1 + 2)) * life.mouth * 0.16 * g);
+  } catch (e) {
+    window.EVA_LIFE = false;
+    console.warn('life layer disabled after an error:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Presence: the human connection (2026-10-17: "she just stands there ... need that human
+// connection"). Layered over whatever she is doing, never over a clip or a gesture:
+//   eyes      eye contact with the person (the camera = the person in front of the screen),
+//             with small saccades; now and then a glance away and back
+//   attention the cursor: when it moves near her, her eyes follow and her head half-follows;
+//             hovering over her earns a smile and a little head tilt
+//   hearing   window.acknowledge(): a small nod and a smile when the person speaks to her
+//   body      weight shifts from foot to foot every few seconds
+//   boredom   window.setBoredom(0..3) from Python (how long nobody needed her): fidgets grow
+//             from finger taps to foot taps, heel bounces and side-to-side rocking
+// All wrapped: a fault disables only this layer.
+// ---------------------------------------------------------------------------
+window.EVA_PRESENCE = true;
+const presence = {
+  eyeYaw: 0, eyePitch: 0, sacYaw: 0, sacPitch: 0, nextSac: 0.5,
+  glance: null, nextGlance: 9,
+  attn: null,                 // { dx, dy, at, hover }
+  headYaw: 0, headPitch: 0, tilt: 0,
+  smile: 0, nod: null,
+  shift: 0, shiftTarget: 0, nextShift: 6,
+  boredom: 0, fidget: null, nextFidget: 12,
+  running: false, externalExpr: false,
+};
+window.setAttention = function (dx, dy, moving, hover) {
+  // dx, dy: where the cursor is from her head, -1..1 (right / down positive, screen space)
+  const now = performance.now() / 1000;
+  const prev = presence.attn;
+  presence.attn = { dx: Math.max(-1, Math.min(1, dx)), dy: Math.max(-1, Math.min(1, dy)),
+                    at: moving || hover ? now : (prev ? prev.at : 0), hover: !!hover };
+};
+window.setBoredom = function (level) { presence.boredom = Math.max(0, Math.min(3, level | 0)); };
+window.acknowledge = function () { presence.nod = { start: performance.now() / 1000 }; presence.smile = Math.max(presence.smile, 0.55); };
+window.setRunning = function (on) { presence.running = !!on; };
+const _origSetExpression = window.setExpression;
+window.setExpression = function (name, weight) {
+  presence.externalExpr = !!(name && weight > 0);
+  return _origSetExpression ? _origSetExpression(name, weight) : undefined;
+};
+
+const FIDGETS = {
+  // Sized for her real size on the desktop (~115 x 218 px): anything smaller does not read.
+  finger_tap: { dur: 2.4, f: (p, t) => { const k = Math.sin(p * Math.PI);    // hands meet in front, fingers drumming
+                  return { luaX: 0.30 * k, ruaX: 0.30 * k, luaY: -0.28 * k, ruaY: 0.28 * k,
+                           llaY: (-1.10 - 0.12 * Math.abs(Math.sin(t * 10))) * k, rlaY: 1.10 * k, headX: 0.10 * k }; } },
+  foot_tap:   { dur: 2.4, foot: (p, t) => Math.max(0, Math.sin(t * 7)) * Math.sin(p * Math.PI) * 1.6,
+                f: (p, t) => ({ headZ: 0.04 * Math.sin(t * 7) * Math.sin(p * Math.PI) }) },
+  heel_bounce:{ dur: 2.0, f: (p, t) => ({ hipY: 0.03 * Math.abs(Math.sin(t * 6)) * Math.sin(p * Math.PI),
+                                          headX: -0.04 * Math.sin(p * Math.PI) }) },
+  rock:       { dur: 3.2, f: (p, t) => { const k = Math.sin(p * Math.PI), w = Math.sin(p * Math.PI * 3);
+                  return { spineZ: 0.11 * w * k, headZ: -0.08 * w * k, luaZ: 0.10 * w * k, ruaZ: 0.10 * w * k }; },
+                hip: (p) => 0.035 * Math.sin(p * Math.PI * 3) * Math.sin(p * Math.PI) },
+  hands_behind:{ dur: 3.4, f: (p) => { const k = Math.sin(p * Math.PI);
+                  return { luaX: -0.55 * k, ruaX: -0.55 * k, llaY: -0.75 * k, rlaY: 0.75 * k, spineX: -0.05 * k, headZ: 0.06 * k }; } },
+  look_hands: { dur: 2.2, f: (p) => { const k = Math.sin(p * Math.PI);
+                  return { headX: 0.36 * k, luaX: 0.45 * k, ruaX: 0.45 * k, llaY: -1.1 * k, rlaY: 1.1 * k, spineX: 0.05 * k }; } },
+  swing_arms: { dur: 2.6, f: (p, t) => { const k = Math.sin(p * Math.PI), w = Math.sin(t * 4.2);
+                  return { luaX: 0.45 * w * k, ruaX: -0.45 * w * k, spineY: 0.10 * w * k, headY: -0.06 * w * k }; } },
+};
+
+// ---- her feeling (core/feeling.py, 2026-10-28) -------------------------------------------
+// energy 0..1 and mood -1..1, eased, shape the whole body: upright and bouncy when bright, head down
+// and slower when low. Reactions are GENERATED (eager, delight, oops, curious, proud): size and timing
+// vary each time, so the same feeling never looks like a replayed clip.
+// 2026-10-28 "I don't see much improvement in the avatar feeling more energetic": her resting feeling is
+// brighter, and while she TALKS her body talks too (talkStep): hand beats, nods and a sway, timed afresh
+// every beat and sized by her energy -- generated, never a replayed clip.
+const affect = { e: 0.62, v: 0.35, te: 0.62, tv: 0.35, until: 0, react: null };
+const AFFECT_BASE = { e: 0.62, v: 0.35 };
+const talk = { w: 0, next: 0, beat: null, sway: Math.random() * 6, hand: 1, cur: {} };
+function talkStep(o, t, dt, now) {
+  const want = (typeof life !== 'undefined' && life.speaking) ? 1 : 0;
+  talk.w += (want - talk.w) * Math.min(1, dt * 4);
+  if (talk.w < 0.02) { talk.beat = null; talk.cur = {}; return; }
+  const e = affect.e, g = talk.w * (0.55 + 0.7 * e);
+  if (want && now >= talk.next) {           // a new beat: which hand, how big, how long -- all fresh
+    const r = Math.random();
+    talk.hand = r < 0.4 ? -1 : r < 0.8 ? 1 : 0;           // 0 = both hands
+    talk.beat = { start: now, dur: rnd(0.35, 0.6), k: rnd(0.6, 1.1), nod: Math.random() < 0.55,
+                  tilt: (Math.random() - 0.5) * 0.16, open: Math.random() < 0.35 };
+    talk.next = now + talk.beat.dur + rnd(0.15, 0.6) * (1.25 - 0.5 * e);
+  }
+  // a slow sway and weight shift under the words
+  talk.sway += dt * (0.9 + 0.8 * e);
+  o.spineY = (o.spineY || 0) + 0.05 * Math.sin(talk.sway) * g;
+  o.spineZ = (o.spineZ || 0) + 0.025 * Math.sin(talk.sway * 0.7) * g;
+  o.chestX -= 0.02 * g;                                   // a little more open while talking
+  // the beat's offsets are eased, never applied raw: a beat that starts as the last fades cannot snap
+  const want2 = {};
+  const b = talk.beat;
+  if (b) {
+    const p = (now - b.start) / b.dur;
+    if (p >= 1.6) talk.beat = null;
+    else {
+      const env = p < 1 ? Math.sin(p * Math.PI) * b.k * g : 0;
+      const L = talk.hand <= 0 ? 1 : 0.25, R = talk.hand >= 0 ? 1 : 0.25;
+      // forearm lifts with the stress of the word, the upper arm comes forward a touch
+      want2.luaX = 0.30 * env * L; want2.ruaX = 0.30 * env * R;
+      want2.llaY = -0.75 * env * L; want2.rlaY = 0.75 * env * R;
+      if (b.open) { want2.luaZ = -0.22 * env * L; want2.ruaZ = 0.22 * env * R; }   // palms open outward
+      if (b.nod) want2.headX = 0.09 * Math.sin(Math.min(1, p) * Math.PI * 2) * env;
+      want2.headZ = b.tilt * env;
+    }
+  }
+  const ek = Math.min(1, dt * 9);
+  for (const k of ['luaX', 'ruaX', 'llaY', 'rlaY', 'luaZ', 'ruaZ', 'headX', 'headZ']) {
+    talk.cur[k] = (talk.cur[k] || 0) + ((want2[k] || 0) - (talk.cur[k] || 0)) * ek;
+    o[k] = (o[k] || 0) + talk.cur[k];
+  }
+}
+
+window.setAffect = function (energy, mood, holdS) {
+  affect.te = Math.max(0, Math.min(1, +energy || 0));
+  affect.tv = Math.max(-1, Math.min(1, +mood || 0));
+  affect.until = performance.now() / 1000 + Math.max(1, +holdS || 10);
+};
+function rnd(a, b) { return a + Math.random() * (b - a); }
+window.emote = function (name, size) {
+  const k = Math.max(0.1, Math.min(1, +size || 0.6));
+  const known = ['eager', 'delight', 'oops', 'curious', 'proud'];
+  if (!known.includes(name)) return false;
+  affect.react = { name, k, start: performance.now() / 1000, dur: rnd(0.9, 1.4) * (name === 'oops' ? 1.3 : 1),
+                   side: Math.random() < 0.5 ? -1 : 1, a: rnd(0.8, 1.2), b: rnd(0.8, 1.2), f: rnd(0.85, 1.2) };
+  return true;
+};
+function affectStep(o, frame, t, dt, idleLike, now) {
+  if (now > affect.until) { affect.te = AFFECT_BASE.e; affect.tv = AFFECT_BASE.v; }
+  affect.e += (affect.te - affect.e) * Math.min(1, dt * 1.4);
+  affect.v += (affect.tv - affect.v) * Math.min(1, dt * 1.4);
+  const e = affect.e, v = affect.v, still = idleLike ? 1 : 0.4;
+  if (idleLike) { try { talkStep(o, t, dt, now); } catch (err) { /* talking gestures are decoration */ } }
+  // posture: bright = upright, chin up; low = a slight slump, head down
+  o.spineX += (-0.04 * Math.max(0, v) + 0.07 * Math.max(0, -v)) * still;
+  o.chestX += -0.03 * Math.max(0, v) * still;
+  o.headX += (-0.06 * Math.max(0, v) + 0.20 * Math.max(0, -v)) * still;
+  // excited: a light bounce on her toes, faster the more energy
+  if (idleLike && e > 0.62) {
+    const amt = (e - 0.62) / 0.38;
+    frame.hipShift = (frame.hipShift || 0);
+    o.hipY = (o.hipY || 0) + 0.012 * amt * Math.abs(Math.sin(t * Math.PI * (1.3 + 1.2 * e)));
+  }
+  // a reaction, if one is running: an envelope rises and falls; every number was varied at its start
+  const r = affect.react;
+  if (r) {
+    const p = (now - r.start) / r.dur;
+    if (p >= 1) affect.react = null;
+    else {
+      const env = Math.sin(p * Math.PI) * r.k, osc = Math.sin(p * Math.PI * 2 * r.f);
+      if (r.name === 'eager') {          // lean in, hands come together, a quick double nod
+        o.spineX += 0.12 * env * r.a; o.headX += 0.14 * Math.sin(p * Math.PI * 4) * env * r.b;
+        o.luaX += 0.55 * env; o.ruaX += 0.55 * env; o.luaY -= 0.45 * env * r.a; o.ruaY += 0.45 * env * r.a;
+        o.llaY -= 0.9 * env; o.rlaY += 0.9 * env;            // elbows bend: the hands meet in front
+      } else if (r.name === 'delight') { // a little hop, arms lift, head tilts to one side, big smile
+        o.hipY = (o.hipY || 0) + 0.03 * Math.max(0, osc) * env * r.a;
+        o.luaZ -= 0.45 * env * r.b; o.ruaZ += 0.45 * env * r.b;
+        o.headZ += 0.14 * r.side * env; presence.smile = Math.max(presence.smile, 0.75 * r.k);
+      } else if (r.name === 'oops') {     // a small head shake, shoulders drop, a sheepish tilt
+        o.headY += 0.20 * Math.sin(p * Math.PI * 6 * r.f) * env; o.headZ += 0.12 * r.side * env;
+        o.headX += 0.15 * env; o.spineX += 0.10 * env; o.luaZ += 0.18 * env; o.ruaZ -= 0.18 * env;
+      } else if (r.name === 'curious') {  // head tilts, leans in a touch, looks up for a moment
+        o.headZ += 0.26 * r.side * env * r.a; o.spineX += 0.08 * env; o.headX -= 0.10 * env * r.b;
+      } else if (r.name === 'proud') {    // chest up, chin up, hands to the hips a little
+        o.chestX -= 0.14 * env * r.a; o.headX -= 0.14 * env; o.luaY -= 0.3 * env; o.ruaY += 0.3 * env;
+        o.luaZ -= 0.35 * env * r.b; o.ruaZ += 0.35 * env * r.b;    // arms out a little,
+        o.llaY -= 1.0 * env; o.rlaY += 1.0 * env;                  // elbows bent: hands to the hips
+      }
+    }
+  }
+}
+
+function presenceStep(frame, t, dt, idleLike) {
+  if (!window.EVA_PRESENCE) return frame;
+  try {
+    const o = frame.o, now = performance.now() / 1000, P = presence;
+    try { affectStep(o, frame, t, dt, idleLike, now); } catch (e) { /* a feeling never breaks the frame */ }
+    // -- what the eyes want ----------------------------------------------------------
+    let wantYaw = 0, wantPitch = 0, headShare = 0;
+    const a = P.attn;
+    const attending = a && (a.hover || now - a.at < 2.2);
+    if (attending) {
+      wantYaw = a.dx * 32; wantPitch = -a.dy * 20; headShare = a.hover ? 0.45 : 0.35;
+    } else if (P.glance && now < P.glance.until) {
+      wantYaw = P.glance.yaw; wantPitch = P.glance.pitch; headShare = 0.25;
+    } else {
+      if (P.glance) P.glance = null;
+      if (now > P.nextGlance) {          // a glance away now and then -- people do not stare
+        const side = Math.random() < 0.5 ? -1 : 1;
+        P.glance = { yaw: side * (14 + Math.random() * 14), pitch: -4 - Math.random() * 8, until: now + 0.7 + Math.random() * 0.9 };
+        P.nextGlance = now + (9 + Math.random() * 14) * (1.4 - 0.8 * affect.e);   // livelier when she has energy
+      }
+    }
+    if (now > P.nextSac) {               // micro-saccades: the eyes never sit perfectly still
+      P.sacYaw = (Math.random() - 0.5) * 5; P.sacPitch = (Math.random() - 0.5) * 3;
+      P.nextSac = now + 0.35 + Math.random() * 2.0;
+    }
+    // eyes move fast, the head follows slower
+    const ek = Math.min(1, dt * 18), hk = Math.min(1, dt * 3.5);
+    P.eyeYaw += (wantYaw + P.sacYaw - P.eyeYaw) * ek;
+    P.eyePitch += (wantPitch + P.sacPitch - P.eyePitch) * ek;
+    P.headYaw += (wantYaw * headShare - P.headYaw) * hk;
+    P.headPitch += (wantPitch * headShare - P.headPitch) * hk;
+    if (P.force) { P.eyeYaw = P.force.yaw; P.eyePitch = P.force.pitch; P.headYaw = P.force.headYaw || 0; P.headPitch = 0; }  // lab only
+    P.tilt += ((attending && a.hover ? 0.10 : 0) - P.tilt) * Math.min(1, dt * 3);
+    const deg = Math.PI / 180;
+    o.headY += T('GAZE_YAW_SIGN', 1) * P.headYaw * deg;
+    o.headX += -T('GAZE_PITCH_SIGN', 1) * P.headPitch * deg;
+    o.headZ += P.tilt;
+
+    // -- smile: soft when looked at or hovered, a pulse when spoken to ------------------
+    const smileWant = (attending ? (a.hover ? 0.45 : 0.12) : 0.06) + 0.3 * Math.max(0, affect.v);
+    P.smile += (smileWant - P.smile) * Math.min(1, dt * 1.5);
+
+    // -- nod when spoken to -----------------------------------------------------------------
+    if (P.nod) {
+      const k = (now - P.nod.start) / 0.75;
+      if (k >= 1) P.nod = null; else o.headX += 0.16 * Math.sin(k * Math.PI * 2) * (1 - k);
+    }
+
+    // -- the body: weight shifts and fidgets, only when she is just standing -----------------
+    frame.hipShift = 0; frame.footTap = 0;
+    if (idleLike) {
+      if (now > P.nextShift) {
+        P.shiftTarget = P.shiftTarget > 0 ? -1 : 1;
+        if (Math.random() < 0.25) P.shiftTarget = 0;
+        P.nextShift = now + 5 + Math.random() * 9;
+      }
+      P.shift += (P.shiftTarget - P.shift) * Math.min(1, dt * 1.2);
+      frame.hipShift = 0.012 * P.shift;
+      o.spineZ += -0.025 * P.shift; o.headZ += 0.015 * P.shift;
+      if (P.boredom > 0 && !P.fidget && now > P.nextFidget) {
+        const pool = P.boredom === 1 ? ['finger_tap', 'look_hands', 'hands_behind', 'foot_tap']
+                   : ['finger_tap', 'foot_tap', 'heel_bounce', 'rock', 'hands_behind', 'swing_arms', 'look_hands', 'swing_arms'];
+        const name = pool[Math.floor(Math.random() * pool.length)];
+        P.fidget = { name, start: now, dur: FIDGETS[name].dur };
+        P.nextFidget = now + (P.boredom === 1 ? 14 : P.boredom === 2 ? 8 : 5) + Math.random() * 10;
+      }
+    }
+    if (P.fidget) {
+      const g = P.fidget, def = FIDGETS[g.name], p = (now - g.start) / g.dur;
+      if (p >= 1 || !idleLike) P.fidget = null;
+      else {
+        if (def.f) { const d = def.f(p, t) || {}; for (const k in d) o[k] = (o[k] || 0) + d[k]; }
+        if (def.foot) frame.footTap = def.foot(p, t);
+        if (def.hip) frame.hipShift += def.hip(p);
+      }
+    }
+  } catch (e) {
+    window.EVA_PRESENCE = false;
+    console.warn('presence layer disabled after an error:', e);
+  }
+  return frame;
+}
+
+function presenceFace(dt) {
+  // after writePose: the eyes (VRM look-at) and the smile
+  if (!window.EVA_PRESENCE || !vrmInstance) return;
+  try {
+    const la = vrmInstance.lookAt;
+    if (la) {
+      la.autoUpdate = true; la.target = null;
+      la.yaw = T('EYE_YAW_SIGN', 1) * presence.eyeYaw;
+      la.pitch = T('EYE_PITCH_SIGN', 1) * presence.eyePitch;
+    }
+    const em = vrmInstance.expressionManager;
+    if (em && !presence.externalExpr) setExpr(em, ['happy', 'Joy', 'joy', 'Happy'], presence.smile);
+  } catch (e) {
+    window.EVA_PRESENCE = false;
+    console.warn('presence face disabled after an error:', e);
+  }
+}
+
+// ---- the channels the controller owns ----------------------------------------
+const CH = ['luaX', 'luaY', 'luaZ', 'ruaX', 'ruaY', 'ruaZ', 'llaY', 'llaZ', 'rlaY', 'rlaZ',
+            'spineX', 'spineY', 'spineZ', 'chestX', 'headX', 'headY', 'headZ', 'hipY'];
+
+function restPose() {
+  const ARM = T('ARM_DOWN_Z', 1.15), ELB = T('ELBOW_BEND_Z', 0.25);
+  const r = {};
+  for (const c of CH) r[c] = 0;
+  r.luaZ = ARM; r.ruaZ = -ARM; r.llaZ = ELB; r.rlaZ = -ELB;
+  r.llaY = -0.18; r.rlaY = 0.18;            // a relaxed elbow is never dead straight
+  r.luaX = 0.04; r.ruaX = 0.04;
+  return r;
+}
+
+// ---- activities: what she is DOING (deltas from rest, plus gentle life) ------
+// Hands are where the work is: in front of her for reading, writing and typing,
+// at the chin for thinking, sweeping for organising, open for presenting.
+const breathe = (t) => ({ chestX: Math.sin(t * 1.3 + 1) * 0.015, spineZ: Math.sin(t * 1.3) * 0.015 });
+const hold = (t, k) => ({                    // both forearms forward, hands near the midline
+  luaX: 0.30 * k, ruaX: 0.30 * k, llaY: -1.35 * k, rlaY: 1.35 * k,
+  luaY: -0.30 * k, ruaY: 0.30 * k, luaZ: 0.10 * k, ruaZ: -0.10 * k });
+const add = (...parts) => { const o = {}; for (const p of parts) for (const k in p) o[k] = (o[k] || 0) + p[k]; return o; };
+
+const ACTIVITIES = {
+  idle: (r, t) => add(breathe(t), { headZ: Math.sin(t * 0.7) * 0.06, headX: Math.sin(t * 0.5 + 1.5) * 0.03,
+                                     headY: Math.sin(t * 0.31) * 0.08 }),
+  listening: (r, t) => add(breathe(t), {        // attentive: head tilted, hands loosely together
+    headZ: 0.13, headX: -0.03 + Math.sin(t * 1.1) * 0.015,
+    luaX: 0.16, ruaX: 0.16, llaY: -0.95, rlaY: 0.95, luaY: -0.35, ruaY: 0.35, luaZ: 0.12, ruaZ: -0.12 }),
+  thinking: (r, t) => add(breathe(t), {         // right hand to the chin, left arm across the waist
+    ruaX: 0.92, ruaY: 0.22, ruaZ: 0.10, rlaY: 2.36 + Math.sin(t * 0.9) * 0.04,   // elbow ~150 deg, a real limit
+    luaX: 0.22, luaY: -0.50, luaZ: 0.12, llaY: -1.55,
+    headZ: -0.10, headX: -0.10 + Math.sin(t * 0.6) * 0.02, headY: Math.sin(t * 0.4) * 0.10 }),
+  reading: (r, t) => {                         // a page in both hands, eyes scanning line by line
+    const line = (t * 0.45) % 1;               // left-to-right sweep, quick return
+    const scan = line < 0.85 ? (line / 0.85) * 2 - 1 : 1 - ((line - 0.85) / 0.15) * 2;
+    return add(breathe(t), hold(t, 1), { luaY: 0.16, ruaY: -0.16, llaY: -0.40, rlaY: 0.40, luaX: 0.10, ruaX: 0.10,
+      headX: 0.38, headY: scan * 0.10, spineX: 0.06,
+      rlaY: 0.25 * pulse((t * 0.12) % 1, 0.0, 0.08) });     // the occasional page turn
+  },
+  writing: (r, t) => add(breathe(t), {          // pad in the left hand, the right hand writing on it
+    luaX: 0.22, luaY: -0.62, luaZ: 0.12, llaY: -1.50,            // forearm across her front: the pad
+    ruaX: 0.42 + Math.sin(t * 2.3) * 0.02, ruaY: 0.20 + Math.sin(t * 7.0) * 0.06, ruaZ: 0.05,
+    rlaY: 1.95 + Math.sin(t * 11.0) * 0.08,
+    headX: 0.30, headY: -0.06, spineX: 0.06 }),
+  browsing: (r, t) => {                        // typing / tapping in front of her
+    const k1 = Math.max(0, Math.sin(t * 9.0)), k2 = Math.max(0, Math.sin(t * 9.0 + 2.6));
+    return add(breathe(t), {
+      luaX: 0.52, ruaX: 0.52, luaY: -0.02, ruaY: 0.02, luaZ: 0.06, ruaZ: -0.06,   // hands low and forward: a keyboard
+      llaY: -1.00 + k1 * 0.12, rlaY: 1.00 - k2 * 0.12,
+      headX: 0.24, headY: Math.sin(t * 0.7) * 0.07, spineX: 0.04 });
+  },
+  searching: (r, t) => add(breathe(t), {        // hand shading the eyes, looking about
+    ruaX: 0.85, ruaY: 0.25, ruaZ: 0.45, rlaY: 2.05,
+    luaZ: -0.30, llaZ: 1.20, llaY: -0.30,         // left hand on the hip
+    headY: Math.sin(t * 0.8) * 0.38, headX: -0.06, spineY: Math.sin(t * 0.8) * 0.10 }),
+  organizing: (r, t) => {                      // moving things about: both hands sweep side to side
+    const s = Math.sin(t * 1.5);
+    return add(breathe(t), {
+      luaX: 0.50, ruaX: 0.50, llaY: -0.95, rlaY: 0.95, luaZ: 0.05, ruaZ: -0.05,
+      luaY: -0.25 + 0.28 * s, ruaY: 0.25 + 0.28 * s,
+      spineY: 0.14 * s, headY: 0.22 * s, headX: 0.12, spineX: 0.05 });
+  },
+  presenting: (r, t) => add(breathe(t), {       // showing the result: right hand open toward it
+    ruaZ: 0.55, ruaX: 0.40, rlaY: 0.55, ruaY: -0.10,
+    luaX: 0.10, llaY: -0.40,
+    spineY: -0.08, headY: -0.12, headZ: 0.06 + Math.sin(t * 1.1) * 0.02 }),
+  hover: (r, t) => ({ luaZ: -0.35, ruaZ: 0.35, llaY: -0.3, rlaY: 0.3, spineX: Math.sin(t * 2) * 0.03,
+                      hipY: Math.sin(t * 2) * 0.04 + 0.05 }),
+  // watching a video with you: hands together in the lap, leaning in a little,
+  // a small chuckle now and then
+  watching: (r, t) => { const laugh = pulse((t * 0.06) % 1, 0.0, 0.05);
+    return add(breathe(t), { luaX: 0.25, ruaX: 0.25, llaY: -1.00, rlaY: 1.00, luaY: -0.35, ruaY: 0.35,
+                             headX: 0.05 - 0.08 * laugh, headZ: 0.05 + Math.sin(t * 0.4) * 0.03, spineX: 0.05,
+                             hipY: 0.010 * laugh * Math.abs(Math.sin(t * 18)) }); },
+  // playing a game: hands forward and together as if on a controller, leaning in, focused,
+  // thumbs busy, a little bounce of concentration
+  playing: (r, t) => { const k1 = Math.max(0, Math.sin(t * 7.0)), k2 = Math.max(0, Math.sin(t * 5.3 + 1.7));
+    return add(breathe(t), { luaX: 0.62, ruaX: 0.62, luaY: -0.30, ruaY: 0.30, llaY: -1.25 - 0.06 * k1,
+                             rlaY: 1.25 + 0.06 * k2, luaZ: 0.10, ruaZ: -0.10,
+                             headX: 0.22 + Math.sin(t * 0.9) * 0.02, spineX: 0.08, headY: Math.sin(t * 0.6) * 0.05,
+                             hipY: 0.006 * Math.abs(Math.sin(t * 2.2)) }); },
+  nap: (r, t) => ({ luaX: 0.20, ruaX: 0.20, llaY: -1.2, rlaY: 1.2, luaY: -0.4, ruaY: 0.4,
+                    spineZ: 0.10, chestX: 0.10 + Math.sin(t * 0.9) * 0.02, headZ: 0.28, headX: 0.22 }),
+};
+ACTIVITIES.working = ACTIVITIES.browsing;
+
+let activity = 'idle';
+window.EVA_ACTIVITY = true;
+window.setActivity = function (name) {
+  if (typeof name === 'string' && ACTIVITIES[name]) activity = name;
+};
+
+// ---- one-shot gestures: (rest, p in 0..1, t) -> {set: absolute targets, add: offsets}
+// Blended over whatever the activity is doing with an envelope that rises and
+// falls smoothly, so a gesture starts from, and returns to, the live pose.
+const PROC = {
+  p_nod:    { dur: 0.9,  f: (r, p) => ({ add: { headX: 0.20 * Math.sin(p * Math.PI * 4) } }) },
+  p_shake:  { dur: 1.0,  f: (r, p) => ({ add: { headY: 0.28 * Math.sin(p * Math.PI * 4) } }) },
+  p_think:  { dur: 2.4,  f: (r, p, t) => ({ set: { ruaX: 0.96, ruaY: 0.22, ruaZ: r.ruaZ + 0.10, rlaY: 2.52,
+                                                   headZ: -0.10, headX: -0.10 } }) },
+  p_type:   { dur: 2.6,  f: (r, p, t) => ({ set: { luaX: 0.56, ruaX: 0.56, luaY: -0.02, ruaY: 0.02,
+                                                   llaY: -1.00 + 0.12 * Math.max(0, Math.sin(t * 9)),
+                                                   rlaY: 1.00 - 0.12 * Math.max(0, Math.sin(t * 9 + 2.6)),
+                                                   headX: 0.20 } }) },
+  p_read:   { dur: 1.8,  f: (r, p) => ({ set: { headX: 0.24 }, add: { headY: 0.22 * Math.sin(p * Math.PI * 2) } }) },
+  p_shrug:  { dur: 1.3,  f: (r, p) => ({ set: { llaY: -1.15, rlaY: 1.15, luaY: 0.35, ruaY: -0.35,
+                                                luaX: 0.15, ruaX: 0.15, headZ: 0.14 }, shoulders: 0.20 }) },
+  p_point_r:{ dur: 1.6,  f: (r, p) => ({ set: { ruaZ: r.ruaZ + 1.05, ruaX: 0.45, rlaY: 0.10, rlaZ: 0,
+                                                spineY: -0.10, headY: -0.30 } }) },
+  p_point_l:{ dur: 1.6,  f: (r, p) => ({ set: { luaZ: r.luaZ - 1.05, luaX: 0.45, llaY: -0.10, llaZ: 0,
+                                                spineY: 0.10, headY: 0.30 } }) },
+  // reach out toward the thing she is about to click and tap it
+  p_reach_r:{ dur: 1.3,  f: (r, p) => ({ set: { ruaZ: r.ruaZ + 0.85, ruaX: 0.55,
+                                                rlaY: 0.30 + 0.30 * pulse(p, 0.45, 0.75),
+                                                spineY: -0.14, headY: -0.32, headX: 0.04 } }) },
+  p_reach_l:{ dur: 1.3,  f: (r, p) => ({ set: { luaZ: r.luaZ - 0.85, luaX: 0.55,
+                                                llaY: -0.30 - 0.30 * pulse(p, 0.45, 0.75),
+                                                spineY: 0.14, headY: 0.32, headX: 0.04 } }) },
+  // minimise / put away: both hands lift in front, then press down and away
+  p_tidy:   { dur: 1.5,  f: (r, p) => { const d = smooth((p - 0.35) / 0.4);
+    return { set: { luaX: 0.75 - 0.50 * d, ruaX: 0.75 - 0.50 * d, llaY: -1.35 + 0.80 * d, rlaY: 1.35 - 0.80 * d,
+                    luaY: -0.20, ruaY: 0.20, spineX: 0.04 + 0.08 * d, headX: 0.10 + 0.12 * d } }; } },
+  // arrange / resize: hands frame the window and slide it across
+  p_arrange:{ dur: 1.8,  f: (r, p) => { const s = -1 + 2 * smooth((p - 0.25) / 0.55);
+    return { set: { luaX: 0.62, ruaX: 0.62, llaY: -0.85, rlaY: 0.85, luaY: -0.15 + 0.30 * s, ruaY: 0.15 + 0.30 * s,
+                    spineY: 0.12 * s, headY: 0.20 * s } }; } },
+  p_bow:    { dur: 1.7,  f: (r, p) => ({ set: { spineX: 0.42, chestX: 0.12, headX: 0.18, luaX: 0.16, ruaX: 0.16,
+                                                llaY: -0.95, rlaY: 0.95, luaY: -0.35, ruaY: 0.35 } }) },
+  p_cheer:  { dur: 1.8, rise: 0.6, fall: 0.6, f: (r, p) => ({ set: { luaZ: r.luaZ - 2.35, ruaZ: r.ruaZ + 2.35, llaZ: -0.35, rlaZ: 0.35,
+                                                llaY: -0.25, rlaY: 0.25, headX: -0.10 },
+                                         add: { hipY: 0.035 * Math.abs(Math.sin(p * Math.PI * 4)) } }) },
+  p_beckon: { dur: 1.7,  f: (r, p) => ({ set: { ruaX: 0.55, ruaY: 0.10, rlaY: 1.45 + 0.45 * Math.sin(p * Math.PI * 6),
+                                                headZ: 0.08 } }) },
+  // a real wave: right arm up beside the head, forearm upright, waving
+  p_wave:   { dur: 2.0,  f: (r, p) => ({ set: { ruaZ: -0.12, ruaX: 0.15, rlaY: 0.05,
+                                                rlaZ: 1.30 + 0.35 * Math.sin(p * Math.PI * 7),
+                                                headZ: -0.08, headY: -0.08 } }) },
+  // handing a task to a helper: the right hand goes out, palm up, and sends it off
+  p_delegate:{ dur: 1.5,  f: (r, p) => { const k = smooth((p - 0.25) / 0.45);
+    return { set: { ruaX: 0.70, ruaY: -0.10, ruaZ: r.ruaZ + 0.30 + 0.40 * k, rlaY: 0.95 - 0.65 * k,
+                    headY: -0.18 * k, headX: 0.04 } }; } },
+  // a yawn: hand to the mouth, head tipped back, mouth wide
+  p_yawn:   { dur: 2.6, rise: 0.7, fall: 0.8, f: (r, p) => ({ set: { ruaX: 0.95, ruaY: 0.28, ruaZ: r.ruaZ + 0.25,
+                                                rlaY: 2.45, headX: -0.28, spineX: -0.05 }, mouth: 0.9 }) },
+  // a big stretch: both arms up over the head, leaning back a little
+  p_stretch_up:{ dur: 2.8, rise: 0.8, fall: 0.8, f: (r, p) => ({ set: { luaZ: r.luaZ - 2.45, ruaZ: r.ruaZ + 2.45,
+                                                llaZ: -0.45, rlaZ: 0.45, luaX: 0.15, ruaX: 0.15,
+                                                spineX: -0.10, headX: -0.18 }, mouth: 0.35 }) },
+  // looking around: a slow scan left and right
+  p_look_around:{ dur: 3.2, f: (r, p) => ({ add: { headY: 0.55 * Math.sin(p * Math.PI * 2), spineY: 0.12 * Math.sin(p * Math.PI * 2) } }) },
+  // landing after being carried: knees give a little, then up
+  p_land:   { dur: 0.8, rise: 0.2, fall: 0.45, f: (r, p) => ({ set: { luaZ: r.luaZ - 0.35, ruaZ: r.ruaZ + 0.35 }, squat: 0.32 }) },
+  // a little crouch before hopping up onto something
+  p_hop:    { dur: 0.6, rise: 0.2, fall: 0.3, f: (r, p) => ({ set: { luaX: -0.2, ruaX: -0.2 }, squat: 0.28 }) },
+  // ---- 2026-10-11: more moments, each tied to what is happening ----------------------
+  // applause: forearms forward, hands meeting at the midline in quick claps
+  p_clap:   { dur: 1.7,  f: (r, p) => { const c = Math.abs(Math.sin(p * Math.PI * 7));
+    return { set: { luaX: 0.70, ruaX: 0.70, llaY: -1.45, rlaY: 1.45, luaY: -0.30 - 0.14 * c, ruaY: 0.30 + 0.14 * c,
+                    headX: -0.06, headZ: 0.06 }, add: { hipY: 0.012 * c } }; } },
+  // "oh no": the right hand comes up to the forehead and the head drops into it
+  p_facepalm:{ dur: 2.0, f: (r, p) => ({ set: { ruaX: 1.40, ruaY: 0.18, ruaZ: r.ruaZ + 0.30,
+                                                rlaY: 2.55, headX: 0.38, spineX: 0.12, headZ: -0.06 },
+                                         shoulders: -0.06 }) },
+  // touched: both hands to the heart, head tilted, a little sway
+  p_heart:  { dur: 2.0,  f: (r, p) => ({ set: { luaX: 0.55, ruaX: 0.55, luaY: -0.55, ruaY: 0.55, llaY: -2.15, rlaY: 2.15,
+                                                headZ: 0.16 }, add: { spineZ: 0.04 * Math.sin(p * Math.PI * 2) } }) },
+  // "shh": a finger to the lips, leaning in a little
+  p_shh:    { dur: 1.7,  f: (r, p) => ({ set: { ruaX: 1.02, ruaY: 0.34, ruaZ: r.ruaZ + 0.20, rlaY: 2.42,
+                                                headX: 0.06, spineX: 0.06, headZ: 0.05 } }) },
+  // a glance at her wrist watch: left forearm across, head down and toward it
+  p_check_watch:{ dur: 2.1, f: (r, p) => ({ set: { luaX: 0.62, luaY: -0.45, luaZ: r.luaZ - 0.05, llaY: -1.85,
+                                                headX: 0.32, headY: 0.20 }, add: { headX: 0.05 * pulse(p, 0.55, 0.85) } }) },
+  // waiting: hands on the hips, weight shifting, head tilting side to side
+  p_impatient:{ dur: 2.6, f: (r, p) => ({ set: { luaZ: r.luaZ - 0.30, llaZ: 1.20, llaY: -0.30,
+                                                ruaZ: r.ruaZ + 0.30, rlaZ: -1.20, rlaY: 0.30 },
+                                         add: { headZ: 0.12 * Math.sin(p * Math.PI * 3), spineZ: 0.04 * Math.sin(p * Math.PI * 3),
+                                                hipY: 0.010 * Math.abs(Math.sin(p * Math.PI * 6)) } }) },
+  // puzzled: the right hand up to the side of the head, scratching, head tilted
+  p_scratch_head:{ dur: 2.1, f: (r, p) => ({ set: { ruaZ: r.ruaZ + 1.85, ruaX: 0.35, rlaY: 2.15 + 0.08 * Math.sin(p * Math.PI * 12),
+                                                headZ: -0.16, headX: 0.04 } }) },
+  // looking closely at the screen: leaning in, a hand shading the eyes
+  p_peer:   { dur: 1.9,  f: (r, p) => ({ set: { ruaX: 0.85, ruaY: 0.25, ruaZ: r.ruaZ + 0.45, rlaY: 2.05,
+                                                spineX: 0.18, headX: 0.10 },
+                                         add: { headY: 0.14 * Math.sin(p * Math.PI * 2) }, squat: 0.10 }) },
+  // carrying a box (files on the move): both arms under it, leaning back with the weight
+  p_carry:  { dur: 2.0,  f: (r, p) => ({ set: { luaX: 0.85, ruaX: 0.85, llaY: -1.10, rlaY: 1.10, luaY: -0.15, ruaY: 0.15,
+                                                spineX: -0.06, headX: 0.10 },
+                                         add: { hipY: 0.010 * Math.abs(Math.sin(p * Math.PI * 4)) } }) },
+  // sending: a paper plane -- wind up, throw forward, follow through
+  p_paper_plane:{ dur: 1.5, f: (r, p) => { const k = smooth((p - 0.35) / 0.25);
+    return { set: { ruaX: -0.35 + 1.55 * k, ruaZ: r.ruaZ + 0.55, rlaY: 1.70 - 1.35 * k,
+                    spineY: 0.12 - 0.24 * k, headY: -0.10 * k, headX: 0.04 } }; } },
+  // phew: the forearm wipes across the brow after a long job
+  p_wipe_brow:{ dur: 1.9, f: (r, p) => { const k = smooth((p - 0.30) / 0.40);
+    return { set: { ruaX: 1.05, ruaZ: r.ruaZ + 0.60, rlaY: 2.30, ruaY: -0.10 + 0.55 * k, headX: -0.10 },
+             shoulders: -0.05, mouth: 0.25 * pulse(p, 0.55, 0.95) }; } },
+  // yes!: a fist pump, twice
+  p_fist_pump:{ dur: 1.9, f: (r, p) => ({ set: { ruaX: 0.50 + 0.30 * Math.abs(Math.sin(p * Math.PI * 2)), ruaZ: r.ruaZ + 0.25,
+                                                rlaY: 2.20, headX: -0.06 },
+                                         add: { hipY: 0.014 * Math.abs(Math.sin(p * Math.PI * 2)) } }) },
+  // ta-da: both arms open low, presenting what she made
+  p_tada:   { dur: 1.5,  f: (r, p) => ({ set: { luaZ: r.luaZ - 0.90, ruaZ: r.ruaZ + 0.90, luaX: 0.30, ruaX: 0.30,
+                                                llaY: -0.20, rlaY: 0.20, headX: -0.08 },
+                                         add: { hipY: 0.016 * pulse(p, 0.10, 0.45) } }) },
+  // "yes ma'am": a salute, chin up
+  p_salute: { dur: 1.6,  f: (r, p) => ({ set: { ruaZ: r.ruaZ + 1.45, ruaX: 0.35, rlaY: 2.35, headX: -0.06 } }) },
+  // "noted": a fingertip taps the temple
+  p_tap_head:{ dur: 1.7, f: (r, p) => ({ set: { ruaX: 0.60, ruaZ: r.ruaZ + 1.25, rlaY: 2.40 + 0.10 * Math.abs(Math.sin(p * Math.PI * 4)),
+                                                headZ: -0.10 } }) },
+  // a sneeze: head back, hands to the face, then the sneeze forward
+  p_sneeze: { dur: 1.9,  f: (r, p) => { const pre = smooth(p / 0.5), go = pulse(p, 0.50, 0.80);
+    return { set: { ruaX: 0.95, luaX: 0.95, rlaY: 2.40, llaY: -2.40, ruaY: 0.30, luaY: -0.30 },
+             add: { headX: -0.28 * pre * (1 - go) + 0.38 * go, spineX: 0.16 * go }, mouth: 0.55 * pre * (1 - go) }; } },
+  // humming to herself: hands behind her back, swaying, head bobbing
+  p_hum:    { dur: 3.6,  f: (r, p) => ({ set: { luaX: -0.30, ruaX: -0.30, llaY: -0.35, rlaY: 0.35 },
+                                         add: { headZ: 0.13 * Math.sin(p * Math.PI * 4), spineZ: 0.05 * Math.sin(p * Math.PI * 4),
+                                                headX: 0.04 * Math.sin(p * Math.PI * 8) }, mouth: 0.12 }) },
+  // shooing something away (ending a process): the forearm flicks outward
+  p_shoo:   { dur: 1.3,  f: (r, p) => ({ set: { ruaX: 0.45, ruaZ: r.ruaZ + 0.35, rlaY: 1.20 + 0.55 * Math.abs(Math.sin(p * Math.PI * 3)),
+                                                headY: -0.10, headZ: 0.06 } }) },
+  // undo: a hand winds backwards in a circle
+  p_rewind: { dur: 1.7,  f: (r, p) => ({ set: { ruaX: 0.60 + 0.22 * Math.sin(p * Math.PI * 4),
+                                                ruaZ: r.ruaZ + 0.40 + 0.22 * Math.cos(p * Math.PI * 4), rlaY: 1.05,
+                                                headY: -0.10 } }) },
+  // going down a checklist: a pad in the left hand, the right hand ticking
+  p_checklist:{ dur: 2.3, f: (r, p) => ({ set: { luaX: 0.22, luaY: -0.62, luaZ: 0.12, llaY: -1.50,
+                                                ruaX: 0.42, ruaY: 0.20, rlaY: 1.90 + 0.28 * Math.abs(Math.sin(p * Math.PI * 3)),
+                                                headX: 0.30, headY: -0.06 } }) },
+  // a squat: hips down, knees out front, arms forward for balance
+  p_squat:  { dur: 2.4,  f: (r, p) => ({ set: { luaX: 1.15, ruaX: 1.15, llaY: -0.15, rlaY: 0.15,
+                                                spineX: 0.22, headX: -0.15 }, squat: 1 }) },
+};
+const PROC_DURATIONS = Object.fromEntries(Object.entries(PROC).map(([k, v]) => [k, v.dur]));
+let procGesture = null;   // { name, start, dur }
+let gazeState = null;     // { gx, gy, start, ttl }
+
+function playProcedural(name) {
+  if (!window.EVA_PROCEDURAL || !usingGltf || !vrmInstance) return false;
+  if (!(name in PROC)) return false;
+  // During an asked-for clip or a walk the body is busy; say no honestly so
+  // the caller can try something else.
+  if (vrmGestureActive || walkW > 0.5) return false;
+  procGesture = { name: name, start: performance.now() / 1000, dur: PROC[name].dur };
+  return true;
+}
+
+window.setGaze = function (gx, gy, ttlMs) {
+  if (!window.EVA_PROCEDURAL) return;
+  gazeState = { gx: gx, gy: gy, start: performance.now() / 1000, ttl: Math.max(0.3, ttlMs / 1000) };
+};
+
+// ---- walking: weight eased in and out; she turns toward where she is going ---
+let walkW = 0, walkPhase = 0, facing = 0, facingTarget = 0;
+let walkRate = 0;            // stride radians per second matched to the ground speed (0 = the fixed default)
+window.setLocomotion = function (moving, direction, speedPx, heightPx) {
+  facingTarget = moving ? Math.max(-1, Math.min(1, direction || 0)) * T('WALK_TURN', 0.75) : 0;
+  // 2026-10-28: a fixed stride rate at any speed made her feet slide. One stride cycle (two steps) covers
+  // about 0.8 of her height on screen, so the cycle runs at the speed her window actually moves.
+  walkRate = (moving && speedPx > 0 && heightPx > 0)
+    ? Math.max(4, Math.min(16, 2 * Math.PI * speedPx / (0.8 * heightPx))) : 0;
+};
+// 60 fps while her window moves (walk, glide) so the body and the window move in step; 0 = configured rate.
+let renderFps = 0;
+window.setRenderFps = function (fps) { renderFps = (fps >= 10 && fps <= 120) ? fps : 0; };
+
+// ---- her body's situation: carried by the person, in the air, sitting --------
+// Python (avatar_ui.py) says where she is; the legs and arms follow, eased.
+//   held      the person is dragging her: arms out, legs dangling and kicking
+//   airborne  flying to something high up, or hovering beside it: legs trail
+//   sitting   on a window's top edge or the taskbar: legs over the edge, swinging
+const bodyState = { held: false, airborne: false, sitting: false };
+let heldW = 0, airW = 0, sitW = 0, mouthOverride = 0;
+window.setBodyState = function (st) {
+  if (!st || typeof st !== 'object') return;
+  for (const k of ['held', 'airborne', 'sitting']) if (k in st) bodyState[k] = !!st[k];
+};
+
+// ---- the controller ------------------------------------------------------------
+const poseController = {
+  cur: null,
+  out: null,
+  step(t, dt) {
+    const rest = restPose();
+    if (!this.cur) this.cur = Object.assign({}, rest);
+    const act = (currentAnim === '__procedural_hover' || currentAnim === 'fly_loop') ? 'hover'
+              : (currentAnim === '__procedural_nap' || currentAnim === 'nap') ? 'nap'
+              : (window.EVA_ACTIVITY && ACTIVITIES[activity] ? activity : 'idle');
+    let delta = {};
+    try { delta = ACTIVITIES[act](rest, t) || {}; } catch (e) { delta = {}; }
+    // A critically damped spring per channel: it starts moving gently,
+    // arrives without overshoot, and its speed is bounded by the distance --
+    // plain exponential easing moves FASTEST in the very first frame, which is
+    // exactly what reads as a jerk when an activity changes.
+    if (!this.vel) { this.vel = {}; for (const ch of CH) this.vel[ch] = 0; }
+    const w0 = T('POSE_EASE', 6);
+    for (const ch of CH) {
+      const target = rest[ch] + (delta[ch] || 0);
+      if (w0 >= 100) { this.cur[ch] = target; this.vel[ch] = 0; continue; }     // lab: snap
+      const a = w0 * w0 * (target - this.cur[ch]) - 2 * w0 * this.vel[ch];
+      this.vel[ch] += a * dt;
+      this.cur[ch] += this.vel[ch] * dt;
+    }
+    const o = Object.assign({}, this.cur);
+    let shoulders = 0, squat = 0, gestureMouth = 0;
+
+    // one-shot gesture over the activity
+    if (procGesture && window.EVA_PROCEDURAL) {
+      const g = procGesture, def = PROC[g.name];
+      const age = (g.freeze != null) ? g.freeze * g.dur : performance.now() / 1000 - g.start;   // freeze: lab only
+      const p = age / g.dur;
+      if (p >= 1 || !def) {
+        procGesture = null;
+      } else {
+        // Rise and fall at a human pace: a hand travels to the chin in about
+        // half a second, not in three frames.
+        const rise = def.rise || Math.min(0.5, g.dur * 0.3), fall = def.fall || Math.min(0.55, g.dur * 0.35);
+        const env = Math.min(smooth(age / rise), smooth((g.dur - age) / fall)) * T('POSE_GAIN', 1);
+        let res = {};
+        try { res = def.f(rest, p, t) || {}; } catch (e) { res = {}; procGesture = null; }
+        for (const k in (res.set || {})) o[k] += (res.set[k] - o[k]) * env;
+        for (const k in (res.add || {})) o[k] += res.add[k] * env;
+        shoulders = (res.shoulders || 0) * env;
+        squat = (res.squat || 0) * env;
+        gestureMouth = (res.mouth || 0) * env;
+      }
+    }
+
+    // body situation weights (about half a second to settle)
+    const ease = Math.min(1, dt * 4);
+    const flying = currentAnim === 'fly';
+    heldW += ((bodyState.held ? 1 : 0) - heldW) * ease;
+    airW += (((bodyState.airborne || flying) && !bodyState.held && !bodyState.sitting ? 1 : 0) - airW) * ease;
+    sitW += ((bodyState.sitting && !bodyState.held ? 1 : 0) - sitW) * Math.min(1, dt * 3);
+    if (sitW > 0.001 && (act === 'idle' || act === 'listening')) {
+      // hands folded in her lap (modest, and natural for sitting on an edge)
+      const sitArms = { luaX: 0.42, ruaX: 0.42, luaY: -0.42, ruaY: 0.42, llaY: -1.05, rlaY: 1.05,
+                        luaZ: rest.luaZ + 0.12, ruaZ: rest.ruaZ - 0.12 };
+      for (const k in sitArms) o[k] += (sitArms[k] - o[k]) * sitW;
+      o.spineX += 0.05 * sitW;
+    }
+    if (airW > 0.001 && act === 'idle' && !procGesture) {
+      o.luaZ += -0.22 * airW; o.ruaZ += 0.22 * airW;            // arms a little out, for balance
+      o.spineX += (flying ? 0.10 : 0.03) * airW;
+    }
+    if (heldW > 0.001) {
+      const kick = Math.sin(t * 5.5);
+      // picked up: hands come up in front of her, a little startled, looking down
+      const heldPose = { luaX: 0.55, ruaX: 0.55, luaZ: rest.luaZ - 0.35, ruaZ: rest.ruaZ + 0.35,
+                         llaY: -1.6, rlaY: 1.6, luaY: -0.2, ruaY: 0.2, headX: 0.20 + 0.03 * kick };
+      for (const k in heldPose) o[k] += (heldPose[k] - o[k]) * heldW;
+    }
+
+    // walk: arms relax toward rest and swing, legs stride, body bobs
+    walkW += ((currentAnim === 'walk' ? 1 : 0) - walkW) * Math.min(1, dt * 6);
+    if (currentAnim === 'walk') walkPhase += dt * (walkRate || (presence.running ? 12 : 7));
+    const s = Math.sin(walkPhase) * walkW;
+    if (walkW > 0.001) {
+      for (const k of ['luaX', 'luaY', 'luaZ', 'ruaX', 'ruaY', 'ruaZ', 'llaY', 'llaZ', 'rlaY', 'rlaZ', 'spineY'])
+        o[k] += (rest[k] - o[k]) * walkW;
+      const run = presence.running ? 1 : 0;
+      o.luaX -= s * (0.32 + 0.25 * run); o.ruaX += s * (0.32 + 0.25 * run);
+      o.llaY -= 0.9 * run * walkW; o.rlaY += 0.9 * run * walkW;      // elbows bent, like a child running
+      o.spineX += 0.06 * run * walkW;
+      o.llaY -= 0.15 * walkW; o.rlaY += 0.15 * walkW;
+      o.spineX += 0.05 * walkW; o.hipY += Math.abs(Math.sin(walkPhase)) * 0.018 * walkW;
+      o.headX *= (1 - walkW * 0.7); o.headZ *= (1 - walkW * 0.7);
+    }
+    mouthOverride = gestureMouth;
+    this.out = o;
+    return { o, shoulders, squat, stride: s, walkW, t, heldW, airW, sitW };
+  },
+};
+window.__poseController = poseController;
+
+let restHipsPos = null;      // normalized hips position at load (VRMA clips move it)
+function boneNode(n) { return vrmInstance && vrmInstance.humanoid.getNormalizedBoneNode(n); }
+
+function writePose(frame, now) {
+  const { o, shoulders, squat, stride, walkW: w } = frame;
+  const tt = frame.t || 0, hw = frame.heldW || 0, aw = frame.airW || 0, sw = frame.sitW || 0;
+  const B = (n) => boneNode(n);
+  const set = (n, x, y, z) => { const b = B(n); if (b) b.rotation.set(x, y, z); };
+  set('leftUpperArm', o.luaX, o.luaY, o.luaZ);
+  set('rightUpperArm', o.ruaX, o.ruaY, o.ruaZ);
+  set('leftLowerArm', 0, o.llaY, o.llaZ);
+  set('rightLowerArm', 0, o.rlaY, o.rlaZ);
+  // Channels say + = forward/down for the torso and head; the bones lean BACK
+  // for + x, so the sign is turned here, in one place.
+  set('spine', -o.spineX, o.spineY, o.spineZ);
+  set('chest', -o.chestX, 0, 0);
+  set('leftShoulder', 0, 0, T('SHOULDER_SIGN', 1) * shoulders);
+  set('rightShoulder', 0, 0, -T('SHOULDER_SIGN', 1) * shoulders);
+  // legs: the stride (walk) and the squat; knees bend back, thighs forward
+  const knee = (ph) => -(0.10 + 0.45 * Math.max(0, Math.sin(ph))) * w;
+  // sitting: thighs out over the edge, shins hanging and swinging gently;
+  // in the air: legs trailing; carried: dangling and kicking a little
+  const swing = Math.sin(tt * 1.7) * 0.20, sway = Math.sin(tt * 2.1) * 0.08, kick = Math.sin(tt * 5.5) * 0.18;
+  const thigh = (sgn) => squat * 1.25 + sw * 1.38 + aw * (0.30 + sgn * sway) + hw * (0.12 + sgn * kick * 0.5);
+  const shin = (sgn) => -squat * 2.1 - sw * (1.42 + sgn * swing) - aw * 0.55 - hw * (0.35 + sgn * kick);
+  set('leftUpperLeg', stride * 0.45 + thigh(1), 0, 0);
+  set('rightUpperLeg', -stride * 0.45 + thigh(-1), 0, 0);
+  set('leftLowerLeg', knee(walkPhase + 1.2) + shin(1), 0, 0);
+  set('rightLowerLeg', knee(walkPhase + 1.2 + Math.PI) + shin(-1), 0, 0);
+  set('leftFoot', squat * 0.85 + sw * 0.20 + aw * 0.35 + hw * 0.30, 0, 0);
+  set('rightFoot', squat * 0.85 + sw * 0.20 + aw * 0.35 + hw * 0.30 - T('FOOT_TAP_SIGN', 1) * 0.35 * (frame.footTap || 0), 0, 0);
+  const hips = B('hips');
+  if (hips && restHipsPos) {
+    hips.rotation.set(0, 0, 0);
+    hips.position.set(restHipsPos.x + (frame.hipShift || 0), restHipsPos.y + o.hipY - squat * T('SQUAT_DROP', 0.40), restHipsPos.z + squat * 0.08);
+  }
+  // head: the pose, then gaze, then the small movements of talking
+  const head = B('head');
+  if (head) {
+    let hx = o.headX, hy = o.headY, hz = o.headZ;
+    if (gazeState) {
+      const age = now - gazeState.start;
+      if (age > gazeState.ttl) gazeState = null;
+      else {
+        const gw = Math.max(0, Math.min(1, age / 0.25, (gazeState.ttl - age) / 0.35));
+        hy += T('GAZE_YAW_SIGN', 1) * gazeState.gx * 0.5 * gw;
+        hx += T('GAZE_PITCH_SIGN', 1) * gazeState.gy * 0.25 * gw;
+      }
+    }
+    if (window.EVA_LIFE && life.speakW > 0.02 && w < 0.5) {
+      hx += 0.035 * Math.sin(now * 2.6) * life.speakW;
+      hy += 0.05 * Math.sin(now * 1.7 + 1.0) * life.speakW;
+      hz += 0.03 * Math.sin(now * 2.1 + 2.0) * life.speakW;
+    }
+    head.rotation.set(-hx, hy, hz);
+  }
+}
+
+// ---- crossfade: capture the pose, then blend every bone from it ---------------
+let xfade = null;            // { q: Map(node -> Quaternion), hips: Vector3, start, dur }
+function allBoneNodes() {
+  if (!vrmInstance) return [];
+  const hb = vrmInstance.humanoid.normalizedHumanBones || {};
+  return Object.values(hb).map(b => b && b.node).filter(Boolean);
+}
+function startCrossfade(dur) {
+  const q = new Map();
+  for (const n of allBoneNodes()) q.set(n, n.quaternion.clone());
+  const hips = boneNode('hips');
+  xfade = { q, hips: hips ? hips.position.clone() : null, start: performance.now() / 1000, dur: dur };
+}
+function applyCrossfade() {
+  if (!xfade) return;
+  const w = smooth((performance.now() / 1000 - xfade.start) / xfade.dur);
+  if (w >= 1) { xfade = null; return; }
+  for (const [n, q0] of xfade.q) {
+    const target = n.quaternion.clone();
+    n.quaternion.copy(q0).slerp(target, w);
+  }
+  const hips = boneNode('hips');
+  if (hips && xfade.hips) hips.position.lerpVectors(xfade.hips, hips.position.clone(), w);
+}
+// Every bone the controller does not write goes back to its rest (identity in
+// normalized space) when a clip lets go of the skeleton; the crossfade above
+// carries her there smoothly instead of leaving a hand or a foot in the
+// clip's last frame.
+function releaseSkeleton() {
+  for (const n of allBoneNodes()) n.quaternion.identity();
+  const hips = boneNode('hips');
+  if (hips && restHipsPos) hips.position.copy(restHipsPos);
+}
+
+// ---- helpers: one small light beside her per background helper ---------------
+// They circle her head slowly while their helper works, and fade away when it
+// is done -- so a glance tells the person that work is going on in the
+// background, and how much.
+const helperOrbs = [];
+let helperTarget = 0;
+window.setHelpers = function (n) { helperTarget = Math.max(0, Math.min(5, n | 0)); };
+function makeOrb() {
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.022, 16, 12),
+                              new THREE.MeshBasicMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.95 }));
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12),
+                              new THREE.MeshBasicMaterial({ color: 0x5aaafa, transparent: true, opacity: 0.28,
+                                                            depthWrite: false, blending: THREE.AdditiveBlending }));
+  g.add(core); g.add(glow);
+  g.userData = { s: 0, phase: Math.random() * Math.PI * 2 };
+  g.scale.setScalar(0.001);
+  return g;
+}
+let _headPos = null;
+function updateHelpers(t, dt) {
+  if (!vrmInstance) return;
+  while (helperOrbs.length < helperTarget) { const o = makeOrb(); scene.add(o); helperOrbs.push(o); }
+  const head = boneNode('head');
+  if (!head) return;
+  _headPos = _headPos || new THREE.Vector3();
+  head.getWorldPosition(_headPos);
+  const n = Math.max(1, helperTarget);
+  for (let i = helperOrbs.length - 1; i >= 0; i--) {
+    const o = helperOrbs[i], u = o.userData;
+    const want = i < helperTarget ? 1 : 0;
+    u.s += (want - u.s) * Math.min(1, dt * 4);
+    if (want === 0 && u.s < 0.02) { scene.remove(o); helperOrbs.splice(i, 1); continue; }
+    const a = t * 0.9 + (i * Math.PI * 2) / n;
+    o.position.set(_headPos.x + Math.cos(a) * 0.26, _headPos.y + 0.02 + Math.sin(t * 2.1 + u.phase) * 0.025,
+                   _headPos.z + Math.sin(a) * 0.12);
+    const pulse = 1 + Math.sin(t * 3 + u.phase) * 0.12;
+    o.scale.setScalar(Math.max(0.001, u.s * pulse));
+  }
+}
+
+function playClip(name) {
+  if (typeof name !== 'string') return false;
+  const key = name.toLowerCase();
+  const resolved = name.startsWith('p_') ? name : (ANIM_MAP[key] || key);
+  if (resolved.startsWith('p_')) {
+    // Work outranks play: a gesture for what she is doing (a reach before a
+    // click, a nod for a result) ends a playful clip, blended, rather than
+    // waiting behind it or being dropped.
+    if (vrmGestureActive) { endVrmGesture(); currentAnim = 'idle'; }
+    return playProcedural(resolved);
+  }
+  currentAnim = name;
+  if (!(usingGltf && gltfMixer)) return false;
+  if (resolved.startsWith('__procedural_')) { endVrmGesture(); return true; }
+  const clip = gltfClips[resolved];
+  if (!clip) {
+    endVrmGesture();                       // 'idle', 'walk', 'fly', or nothing to play
+    return name === 'idle' || name === 'walk' || name === 'fly';
+  }
+  if (vrmInstance) startCrossfade(0.35);
+  if (activeGltfAction) activeGltfAction.stop();
+  procGesture = null;
+  activeGltfAction = gltfMixer.clipAction(clip);
+  activeGltfAction.reset();
+  activeGltfAction.setLoop(THREE.LoopOnce);
+  activeGltfAction.clampWhenFinished = true;
+  activeGltfAction.setEffectiveWeight(1);
+  activeGltfAction.play();
+  activeGltfAction.time = CLIP_START[resolved] || 0;
+  vrmGestureActive = !!vrmInstance;
+  return true;
+}
+window.playClip = playClip;
+
+
+function resetToBase() {
+  // Every property any animation case below can modify, reset to its
+  // base value FIRST, before the current case applies its own offsets.
+  // Without this, a property one animation set (rightArm.rotation.z from
+  // "wave", leftFin/rightFin.rotation.x from "walk", eye scale from
+  // "nap"...) stayed stuck at its last value after switching to an
+  // animation that never touches that property -- e.g. wave -> idle left
+  // the arm frozen mid-wave, since idle's own case never mentioned it.
+  leftEye.scale.y = 1; rightEye.scale.y = 1;
+  bot.rotation.x = 0; bot.rotation.y = 0; bot.rotation.z = 0;
+  bot.position.x = 0; bot.position.y = -0.55; bot.position.z = 0;
+  rightArm.rotation.z = 0;
+  leftFin.rotation.x = 0; rightFin.rotation.x = 0;
+}
+
+function animateProcedural(t) {
+  if (usingGltf) return;
+  eyeMat.emissiveIntensity = 1.2 + Math.sin(t * 2) * 0.2;
+  resetToBase();
+
+  switch (currentAnim) {
+    case "walk": // floats/drifts rather than walks -- no legs on this body
+      bot.position.y = -0.55 + Math.sin(t * 4) * 0.08;
+      bot.rotation.z = Math.sin(t * 4) * 0.05;
+      leftFin.rotation.x = -0.2 + Math.sin(t * 8) * 0.15;
+      rightFin.rotation.x = -0.2 - Math.sin(t * 8) * 0.15;
+      break;
+    case "dance":
+      bot.rotation.y = t * 3;
+      bot.position.y = -0.55 + Math.abs(Math.sin(t * 6)) * 0.1;
+      break;
+    case "wave":
+      rightArm.rotation.z = -0.5 + Math.sin(t * 10) * 0.5;
+      break;
+    case "point":
+      bot.rotation.x = -0.15;
+      bot.position.z = 0.1;
+      break;
+    case "click": // reach/poke gesture toward a real window element
+      bot.rotation.x = -0.2;
+      bot.position.z = 0.15;
+      bot.position.y = -0.55 + Math.sin(t * 12) * 0.03;
+      break;
+    case "fly_loop":
+      bot.rotation.y = t * 1.5;
+      bot.position.y = -0.55 + Math.sin(t * 3) * 0.12;
+      break;
+    case "nap":
+      eyeMat.emissiveIntensity = 0.15;
+      leftEye.scale.y = 0.15; rightEye.scale.y = 0.15;
+      bot.rotation.z = 0.3;
+      bot.position.y = -0.75;
+      break;
+    default: // idle -- gentle hover bob
+      leftEye.scale.y = 1; rightEye.scale.y = 1;
+      bot.rotation.x = 0; bot.rotation.y = 0; bot.rotation.z = 0;
+      bot.position.z = 0;
+      bot.position.y = -0.55 + Math.sin(t * 1.3) * 0.05;
+  }
+}
+
+// A clip lets go of the skeleton: capture the pose it left her in, stop it,
+// return the bones it moved to rest, and let the crossfade carry her from the
+// captured pose into whatever she is doing now. (Snapping straight to the
+// rest pose here was the "glitch" at the end of every gesture.)
+function endVrmGesture() {
+  if (activeGltfAction) {
+    if (vrmInstance) { startCrossfade(0.5); releaseSkeleton(); }
+    activeGltfAction.stop();
+    activeGltfAction = null;
+  }
+  vrmGestureActive = false;
+}
+
+// Locomotion (leg/arm swing during a walk) is now handled directly inside
+// tick()'s idle block, keyed off currentAnim === 'walk' -- see there. This
+// used to be a separate system (setLocomotion/applyLocomotion) tracking
+// its own moving/direction state, but running BOTH systems at once would
+// have meant two independent pieces of code writing to the same leg/arm
+// bones every frame, which is exactly the kind of conflict that produces
+// visible jitter (see the comment on endVrmGesture for the same failure
+// pattern elsewhere). One system owns the walk pose now, not two.
+
+// Frame rate is capped inside tick() itself (currently 30fps -- see the
+// comment there for why this is deliberately aggressive, not just tuned).
+let lastFrameMs = 0;
+let lastHeartbeatMs = 0;
+let renderFailures = 0;
+function tick() {
+  requestAnimationFrame(tick);
+  const nowMs = performance.now();
+  // 30fps. 10fps was tried while hunting the WebGL context losses and is
+  // simply too low for motion: a walk cycle and the VRMA gestures both
+  // read as visibly choppy at that rate. The losses had concrete causes
+  // that are now fixed (see the pixel-ratio comment above), so this is
+  // back to a rate that actually looks like movement while still being
+  // half the cost of an uncapped 60fps.
+  if (nowMs - lastFrameMs < 1000 / (renderFps || RENDER_OPTS.fps) - 2) return;   // -2 ms: vsync jitter must not skip a whole frame
+  window.__renders = (window.__renders || 0) + 1;       // frames drawn (tools/walk_bench.py)
+  lastFrameMs = nowMs;
+  // Independent liveness signal for avatar_ui.py's watchdog -- a GPU
+  // PROCESS crash (not just one page's WebGL context dying) doesn't
+  // always cleanly dispatch 'webglcontextlost' before Chromium tears
+  // things down, confirmed directly: a real context-loss crash showed
+  // Chromium's own native log lines but neither our event listener nor
+  // its Python-side recovery ever fired. A stale heartbeat catches that
+  // case regardless of which specific browser signal did or didn't fire.
+  if (nowMs - lastHeartbeatMs > 2000) { lastHeartbeatMs = nowMs; console.log('EVA_HEARTBEAT'); }
+  // clock.getDelta() can return a large dt after the tab was backgrounded
+  // and refocused (or the window minimized) -- requestAnimationFrame just
+  // pauses rather than ticking normally, so the next delta can be many
+  // seconds. Feeding that straight into gltfMixer.update() jumps the
+  // animation forward/skips phases instead of resuming smoothly. Clamp to
+  // a sane per-frame max.
+  // Settings > Gesture speed (window.EVA_SPEED, 0.5-1.6) scales pose easing and clips.
+  const dt = Math.min(clock.getDelta(), 0.1) * Math.max(0.5, Math.min(1.6, window.EVA_SPEED || 1));
+  const t = clock.getElapsedTime();
+  if (vrmInstance) {
+    // Order matters: the clip (if any) or the controller writes the bones,
+    // the crossfade smooths any change of owner, and only THEN does
+    // vrm.update() copy the pose to the visible skeleton and run the hair and
+    // cloth physics -- so what renders is this frame's pose, not last frame's.
+    if (gltfMixer) gltfMixer.update(dt);
+    lifeUpdate(t, dt);
+    const nowS = performance.now() / 1000;
+    if (!vrmGestureActive) {
+      try {
+        const fr = poseController.step(t, dt);
+        const idleLike = (activity === 'idle' || activity === 'listening') && !procGesture
+                         && fr.walkW < 0.2 && fr.sitW < 0.5 && fr.heldW < 0.2 && fr.airW < 0.3
+                         && currentAnim !== '__procedural_nap' && currentAnim !== 'nap';
+        writePose(presenceStep(fr, t, dt, idleLike), nowS);
+      } catch (e) {
+        console.warn('pose controller error (falling back to the rest pose):', e && e.message);
+        procGesture = null;
+      }
+    }
+    applyCrossfade();
+    presenceFace(dt);
+    // Turn toward where she is walking, and back to face the person after.
+    facing += (facingTarget - facing) * Math.min(1, dt * 4);
+    vrmInstance.scene.rotation.y = Math.PI + facing + (window.__labYaw || 0);
+    vrmInstance.update(dt);
+    try { updateHelpers(t, dt); } catch (e) { /* the lights are decoration: never break the frame */ }
+  } else if (usingGltf && gltfMixer) {
+    gltfMixer.update(dt);
+  } else {
+    animateProcedural(t);
+  }
+  // If the WebGL context is dying, render() throws every single frame --
+  // without this guard that spams the Python-side log at ~10 lines/second
+  // via ConsoleLoggingPage, on top of whatever's already going wrong. The
+  // webglcontextlost handler above schedules the actual reload for
+  // recovery; this just stops the log flood while that's pending.
+  try {
+    renderer.render(scene, camera);
+  } catch (err) {
+    renderFailures++;
+    if (renderFailures === 1 || renderFailures === 30) {
+      console.error('render() failed' + (renderFailures > 1 ? ` (${renderFailures} frames)` : '') + ': ' + (err && err.message));
+    }
+    if (renderFailures > 120) return;  // stop ticking entirely; only the reload can help now
+  }
+}
+// ---------------------------------------------------------------------------
+// Pose lab: open web/avatar_3d.html?lab=1 over http://localhost (see
+// pose_lab.bat). Shows the character on a plain background with buttons for
+// every pose, expression and the mouth, and sliders for the tunables. "Copy
+// settings" prints a POSE_TUNING line for config.py. Not active inside Eva.
+// ---------------------------------------------------------------------------
+if (new URLSearchParams(location.search).get('lab')) {
+  // Lab-only handles for inspecting the rig (bones, clip lengths). Never set
+  // inside Eva, which does not load with ?lab.
+  window.__eva = { vrm: () => vrmInstance, clips: () => gltfClips, presence: () => presence,
+                   bone: (n) => vrmInstance && vrmInstance.humanoid.getNormalizedBoneNode(n),
+                   // Hold a procedural gesture at phase p (0..1), to inspect it.
+                   hold: (name, p) => { if (!PROC[name]) return false; procGesture = { name, start: 0, dur: PROC[name].dur, freeze: p }; return true; },
+                   // Hold a clip at an exact moment (seconds), for inspecting it frame by frame.
+                   seek: (name, t) => { if (!playClip(name) || !activeGltfAction) return false;
+                     activeGltfAction.stopFading(); activeGltfAction.setEffectiveWeight(1);
+                     activeGltfAction.time = t; activeGltfAction.paused = true; gltfMixer.update(0); return true; } };
+  document.body.style.background = '#cfd6e0';
+  window.EVA_TUNE = window.EVA_TUNE || {};
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;top:0;left:0;width:330px;max-height:100vh;overflow:auto;' +
+    'background:#101820;color:#e6edf3;font:13px Segoe UI,Arial,sans-serif;padding:10px;z-index:9;';
+  box.innerHTML = '<b style="font-size:15px">Eva pose lab</b><div id="labmsg" style="color:#8fd;margin:4px 0"></div>';
+  document.body.appendChild(box);
+  const say = (m) => { document.getElementById('labmsg').textContent = m; };
+  const row = (label) => { const d = document.createElement('div'); d.style.margin = '6px 0';
+    d.innerHTML = '<div style="color:#9ab;margin-bottom:3px">' + label + '</div>'; box.appendChild(d); return d; };
+  const btn = (parent, text, fn) => { const b = document.createElement('button'); b.textContent = text;
+    b.style.cssText = 'margin:2px;padding:4px 8px;background:#1f6feb;color:#fff;border:0;border-radius:4px;cursor:pointer';
+    b.onclick = () => { try { fn(); } catch (e) { say('error: ' + e.message); } }; parent.appendChild(b); return b; };
+
+  const acts = row('Activities (what she is doing -- eases between them)');
+  Object.keys(ACTIVITIES).forEach(n => btn(acts, n, () => { window.setActivity(n); say('activity: ' + n); }));
+
+  const poses = row('Poses (procedural one-shots)');
+  Object.keys(PROC_DURATIONS).forEach(n => btn(poses, n.replace('p_', ''), () => {
+    if (!playProcedural(n)) say(n + ' could not play (a clip is running, or the model has not loaded)'); else say('playing ' + n); }));
+
+  const clips = row('Classic clips');
+  Object.keys(VRMA_FILES).concat(['idle']).forEach(n =>
+    btn(clips, n, () => { say(playClip(n) ? 'playing ' + n : n + ' not available'); }));
+
+  const mouth = row('Mouth and eyes');
+  btn(mouth, 'speak ON', () => { window.setSpeaking(true); say('mouth moving'); });
+  btn(mouth, 'speak OFF', () => window.setSpeaking(false));
+  btn(mouth, 'blink now', () => { life.nextBlink = 0; });
+  ['Joy', 'Fun', 'Sad', 'Surprised', 'Angry', 'Neutral'].forEach(n => btn(mouth, n, () => setExpression(n, 1)));
+  btn(mouth, 'clear', () => setExpression('', 0));
+  btn(mouth, 'list model expressions', () => {
+    const em = vrmInstance && vrmInstance.expressionManager;
+    const names = em ? Object.keys(em.expressionMap || {}) : [];
+    say('expressions: ' + (names.join(', ') || '(model not loaded, or none)')); });
+
+  const gaze = row('Gaze: click the square (centre = straight ahead)');
+  const pad = document.createElement('div');
+  pad.style.cssText = 'width:150px;height:110px;background:#1c2733;border:1px solid #345;cursor:crosshair;position:relative';
+  pad.onclick = (e) => { const r = pad.getBoundingClientRect();
+    const gx = ((e.clientX - r.left) / r.width) * 2 - 1, gy = ((e.clientY - r.top) / r.height) * 2 - 1;
+    window.setGaze(gx, gy, 3000); say('gaze x=' + gx.toFixed(2) + ' y=' + gy.toFixed(2) + ' (screen right/down are +)'); };
+  gaze.appendChild(pad);
+
+  const tune = row('Tuning');
+  const defs = [['GAZE_YAW_SIGN', -1, 1, 2, 1], ['GAZE_PITCH_SIGN', -1, 1, 2, 1], ['SHOULDER_SIGN', -1, 1, 2, 1],
+                ['POSE_GAIN', 0.3, 2, 0.05, 1], ['ARM_DOWN_Z', 0.4, 1.6, 0.02, 1.15],
+                ['ELBOW_BEND_Z', 0, 0.8, 0.02, 0.25], ['MOUTH_GAIN', 0.2, 2, 0.05, 1],
+                ['POSE_EASE', 2, 14, 0.5, 6]];
+  defs.forEach(([k, lo, hi, step, d]) => {
+    const w = document.createElement('div'); w.style.margin = '3px 0';
+    const val = document.createElement('span'); val.textContent = d; val.style.cssText = 'float:right;color:#8fd';
+    const lab = document.createElement('div'); lab.textContent = k; lab.style.color = '#9ab'; lab.appendChild(val);
+    const inp = document.createElement('input'); inp.type = 'range'; inp.min = lo; inp.max = hi; inp.step = step; inp.value = d; inp.style.width = '100%';
+    if (step === 2) { inp.min = -1; inp.max = 1; inp.step = 2; }   // sign: -1 or 1
+    inp.oninput = () => { const v = parseFloat(inp.value); window.EVA_TUNE[k] = v; val.textContent = v; };
+    window.EVA_TUNE[k] = d; w.appendChild(lab); w.appendChild(inp); tune.appendChild(w);
+  });
+  const out = document.createElement('textarea');
+  out.style.cssText = 'width:100%;height:110px;margin-top:6px;background:#0b1117;color:#cde;border:1px solid #345;font:12px Consolas,monospace';
+  btn(tune, 'Show settings to paste into config.py', () => {
+    const items = Object.entries(window.EVA_TUNE).map(([k, v]) => '    "' + k + '": ' + v + ',');
+    out.value = 'POSE_TUNING = {\n' + items.join('\n') + '\n}'; out.select(); say('copy the text below into config.py'); });
+  tune.appendChild(out);
+  say('Model loading... buttons work once she appears.');
+}
+
+tick();
+</script>
+</body>
+</html>

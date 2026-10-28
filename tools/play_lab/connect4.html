@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>Connect Four</title>
+<style>body{margin:0;background:#eef;display:flex;justify-content:center;align-items:center;height:100vh;font-family:Arial}
+#msg{position:fixed;top:10px;width:100%;text-align:center;font-size:22px}</style>
+<div id=msg>You are red</div><canvas id=c width=560 height=480></canvas>
+<script>
+const R=6,C=7,S=80,cv=document.getElementById('c'),g=cv.getContext('2d');let B=[...Array(R)].map(()=>Array(C).fill(0)),over=false;
+function drawB(){g.fillStyle='#1e5bc6';g.fillRect(0,0,560,480);for(let r=0;r<R;r++)for(let c=0;c<C;c++){g.beginPath();g.arc(c*S+40,r*S+40,32,0,7);g.fillStyle=['#ffffff','#e74c3c','#f1c40f'][B[r][c]];g.fill()}}
+function drop(c,p){for(let r=R-1;r>=0;r--)if(!B[r][c]){B[r][c]=p;return r}return -1}
+function win(p){for(let r=0;r<R;r++)for(let c=0;c<C;c++)for(const[dr,dc]of[[0,1],[1,0],[1,1],[1,-1]]){let k=0;for(;k<4;k++){const rr=r+k*dr,cc=c+k*dc;if(rr<0||rr>=R||cc<0||cc>=C||B[rr][cc]!==p)break}if(k==4)return true}return false}
+function end(t){over=true;document.getElementById('msg').textContent=t;window.RESULT=t}
+function ai(){const ok=[...Array(C).keys()].filter(c=>!B[0][c]);for(const p of[2,1])for(const c of ok){const r=drop(c,p);const w=win(p);B[r][c]=0;if(w)return c}
+ const pref=[3,2,4,1,5,0,6].filter(c=>ok.includes(c));return Math.random()<.6?pref[0]:ok[Math.floor(Math.random()*ok.length)]}
+cv.onclick=e=>{if(over)return;const c=Math.floor(e.offsetX/S);if(B[0][c])return;drop(c,1);drawB();if(win(1))return end('red wins');
+ if(B[0].every(v=>v))return end('draw');setTimeout(()=>{drop(ai(),2);drawB();if(win(2))end('yellow wins');else if(B[0].every(v=>v))end('draw')},600)};drawB();
+</script>

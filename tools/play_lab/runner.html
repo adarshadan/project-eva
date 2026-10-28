@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>Runner</title>
+<style>body{margin:0;background:#fff;display:flex;justify-content:center;align-items:center;height:100vh}</style>
+<canvas id=c width=700 height=200 style="border:1px solid #eee"></canvas>
+<script>
+// Chrome-dino style: a runner, cacti on the ground, birds in the air, speeding up; Space jumps, Down ducks.
+const cv=document.getElementById('c'),g=cv.getContext('2d');const GY=170;let y=0,v=0,duck=false,obs=[],speed=320,started=false,dead=false,t=0,next=1.2,last=performance.now();
+document.onkeydown=e=>{if(e.code=='Space'||e.code=='ArrowUp'){e.preventDefault();started=true;if(y==0&&!dead)v=650}if(e.code=='ArrowDown')duck=true};document.onkeyup=e=>{if(e.code=='ArrowDown')duck=false};
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;
+ if(started&&!dead){t+=dt;speed=320+t*12;v-=1900*dt;y=Math.max(0,y+v*dt);if(y==0)v=Math.max(0,v);next-=dt;
+  if(next<=0){const bird=t>8&&Math.random()<.3;obs.push(bird?{x:700,w:34,h:18,b:GY-28}:{x:700,w:16+Math.random()*16,h:32+Math.random()*14,b:GY});next=.9+Math.random()*1.1}
+  for(const o of obs)o.x-=speed*dt;obs=obs.filter(o=>o.x>-50);
+  const h=duck?24:44,top=GY-y-h,bot=GY-y;for(const o of obs){const ot=o.b-o.h;if(60+30>o.x&&60<o.x+o.w&&bot>ot&&top<o.b)dead=true}if(dead)window.RESULT='dead '+t.toFixed(1)}
+ window.TIME=t;g.fillStyle='#fff';g.fillRect(0,0,700,200);g.fillStyle='#555';g.fillRect(0,GY,700,2);g.fillStyle='#535353';
+ const h=duck?24:44;g.fillRect(60,GY-y-h,30,h);for(const o of obs)g.fillRect(o.x,o.b-o.h,o.w,o.h);g.font='16px Arial';g.fillText(t.toFixed(1),640,20);if(!dead)requestAnimationFrame(frame)}requestAnimationFrame(frame);
+</script>

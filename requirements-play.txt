@@ -1,0 +1,8 @@
+# Optional speed-ups for continuous activities, installed by run.bat in their own
+# step so a failure here never blocks Eva's main dependencies:
+#   dxcam         Desktop Duplication capture, 100+ fps (mss is the fallback)
+#   winocr        Windows' own OCR, for "until the text appears" and 2048 clones
+#   pydirectinput scan-code keys, for games that ignore ordinary key events
+dxcam; sys_platform == "win32"
+winocr; sys_platform == "win32"
+pydirectinput; sys_platform == "win32"
