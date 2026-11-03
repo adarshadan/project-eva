@@ -1852,3 +1852,18 @@ From the 09:56-10:01 log ("some issues with its responses ... not much improveme
   "Feeling: eager" on each request and replies working.
 Watch: some phrases come back empty from canary (e.g. 6.3 s heard as ''); possibly background speech or her own
 voice through the earbuds. Phrases still sometimes cut short ("Perfect. Can you").
+
+## 67. Idea backlog from outside research (2026-10-29 .. 11-04) -- ideas only, our own code
+Ranked by value for Eva (free models, weak laptop). Nothing built yet.
+1. Coding helper: Eva hands programming jobs to OpenCode on the PC (free model) and reports back (from gawkbot).
+2. Show her once: record the person doing a task (screens + clicks), draft a skill, person approves (Grok Bot, gawkbot).
+3. Fast helper reads bulky input: a cheap/fast model reads long pages/files and returns only what is asked;
+   the main model works from the summary -- saves context and the 30 RPM budget (Spotify shunt).
+4. Local front desk: tiny local model (LFM3-1.7B) answers simple commands instantly, routes the rest (LFM3; Unsloth idea).
+5. Turn detection / partial words on CPU (Moonshine or LFM3-Audio-2B) -- for cut and empty phrases.
+6. Approvals on the phone: yes/no as a phone notification, one tap (bloks, gawkbot).
+7. One action log: every action decided and recorded in one place, viewable later (CopilotKit OpenBot).
+8. Take over / hand back: person takes control mid-task (sign-in, 2FA), Eva resumes (Grok Bot, OpenBot).
+9. Specialist personas with own memory and routines (Rakazo, OpenMausBot) -- low priority for a single avatar.
+Trials pending: Nemotron 3 Nano Omni (quick look + direct audio), Parakeet v3 vs canary-1b, Kokoro offline voice,
+LFM3 speed on the i5. Rejected: JEV-27B-VL (no free host), grok-bot-app/grok-bot (fake "official" repo, malware risk).
