@@ -62,6 +62,37 @@ STOP_ANYWHERE = re.compile(
     r"\b(?:stop|cancel) (?:everything|all of (?:it|that))\b|\bstop (?:it|that|talking) now\b", re.IGNORECASE)
 
 
+# 2026-11-10: "Perfect. Can you" arrived as a request of its own because he paused for breath; the rest
+# came as a second phrase and neither made sense alone. A phrase that ends on a word which cannot end a
+# sentence waits a moment for the rest and is sent joined.
+_DANGLING_ONE = {"and", "or", "but", "because", "so", "the", "a", "an", "to", "of", "for", "with", "from", "into",
+                 "about", "my", "your", "our", "is", "are", "if", "then", "also", "that's", "it's", "i", "i'm"}
+_DANGLING_TWO = {"can you", "could you", "would you", "will you", "i want", "i need", "i think", "tell me",
+                 "show me", "want to", "need to", "have to", "going to", "how to", "how do", "what is", "and then",
+                 "you can", "you just", "let me", "there is", "there are"}
+
+
+def unfinished(text: str) -> bool:
+    """Does this phrase stop mid-sentence? ("Perfect. Can you", "open the", "I want to")"""
+    words = re.sub(r"[^\w' ]+", " ", str(text or "").lower()).split()
+    if not words:
+        return False
+    if " ".join(words[-2:]) in _DANGLING_TWO:
+        return True
+    return words[-1] in _DANGLING_ONE and len(words) >= 2
+
+
+def join_phrases(first: str, rest: str) -> str:
+    """Two halves of one sentence as one: 'Perfect. Can you.' + 'Open the calculator?'."""
+    first = re.sub(r"[\s.,;:!?]+$", "", str(first or "")).strip()
+    rest = str(rest or "").strip()
+    if not first:
+        return rest
+    if rest[:1].isupper() and not rest[:2].isupper() and rest.split(" ")[0] != "I":
+        rest = rest[:1].lower() + rest[1:]
+    return f"{first} {rest}".strip()
+
+
 def is_stop_phrase(text: str) -> bool:
     if STOP_ANYWHERE.search(text or ""):
         return True
@@ -91,6 +122,7 @@ class Runtime:
         self._stop_hooks = list(stop_hooks)         # e.g. browser_agent.request_abort
         self._clear_hooks = list(clear_hooks)       # e.g. browser_agent.clear_abort
         self._q = queue.Queue()
+        self._held, self._held_timer, self._held_lock = None, None, threading.Lock()   # an unfinished phrase
         self._stop = threading.Event()
         self._mode = "voice"
         self.paused = False
@@ -130,7 +162,36 @@ class Runtime:
                 log.info(f"Ignoring heard text while Eva is speaking: {text!r}")
                 return
         self._on_heard()
+        self._submit_voice(text)
+
+    def _submit_voice(self, text):
+        """Send what was heard -- unless it stops mid-sentence: then wait a moment for the rest."""
+        wait = float(getattr(config, "STT_JOIN_UNFINISHED_SECONDS", 3.0) or 0)
+        with self._held_lock:
+            held, timer = self._held, self._held_timer
+            self._held, self._held_timer = None, None
+        if timer is not None:
+            timer.cancel()
+        if held:
+            text = join_phrases(held, text)
+            log.info(f"Joined with the unfinished phrase before it: {text!r}")
+        if wait > 0 and unfinished(text) and not held:
+            log.info(f"Unfinished phrase -- waiting {wait:g} s for the rest: {text!r}")
+            self._show_text(f'Heard: "{text} ..."', int(wait * 1000))
+            t = threading.Timer(wait, self._release_held)
+            t.daemon = True
+            with self._held_lock:
+                self._held, self._held_timer = text, t
+            t.start()
+            return
         self.submit(text, "voice")
+
+    def _release_held(self):
+        with self._held_lock:
+            held, self._held, self._held_timer = self._held, None, None
+        if held:
+            log.info(f"Nothing followed -- sending the phrase as it is: {held!r}")
+            self.submit(held, "voice")
 
     def submit(self, text: str, mode: str = "chat", meta: dict = None):
         text = (text or "").strip()

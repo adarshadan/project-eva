@@ -20,6 +20,7 @@ import speech_recognition as sr
 import config
 import stt_local
 import stt_nvidia
+import stt_groq
 import tts_nvidia
 from logger import get_logger
 
@@ -496,6 +497,13 @@ def recognize(recognizer, audio):
             if not text:
                 raise sr.UnknownValueError()
             return text
+    if stt_groq.enabled():                               # the second recogniser: Groq's free Whisper
+        text = _with_deadline(lambda: stt_groq.transcribe(audio.get_wav_data(convert_rate=16000, convert_width=2)),
+                              STT_DEADLINE_S)
+        if text is not None:
+            if not text:
+                raise sr.UnknownValueError()
+            return text
     if stt_local.enabled():
         text = stt_local.transcribe(audio.get_wav_data(convert_rate=16000, convert_width=2))
         if text is not None:
@@ -589,10 +597,42 @@ class Endpointer:
         self.pause, self.short_pause, self.short_speech = pause, short_pause, short_speech
         self.tail_n = max(1, int(round(tail / self.sec)))
         self.limit, self.min_speech = limit, min_speech
+        # 2026-11-10: the person's own loudness, learnt from phrases that were understood (VoiceLevel).
+        # With it, a sound far below their voice neither opens a phrase nor counts as one.
+        self.voice_level = None
+        self.open_fraction, self.faint_fraction = 0.015, 0.06
+        self.dropped_faint = 0
         self._reset()
 
     def _reset(self):
         self.frames, self.loud, self.silent, self.speech, self.active = [], 0, 0, 0.0, False
+        self.levels = []
+
+    def _gate(self):
+        if self.voice_level:
+            return max(self.thr, min(self.cap, self.voice_level * self.open_fraction))
+        return self.thr
+
+    @staticmethod
+    def loudness(levels):
+        """How loud a phrase was: its 90th percentile chunk (speech peaks; the gaps do not count)."""
+        if not levels:
+            return 0.0
+        v = sorted(levels)
+        return float(v[min(len(v) - 1, int(len(v) * 0.9))])
+
+    def _finish(self, out, speech):
+        level = self.loudness(self.levels)
+        self.meta = dict(self.meta, level=int(level))
+        self._reset()
+        if speech < self.min_speech:
+            return None
+        if self.voice_level and level < self.voice_level * self.faint_fraction:
+            self.dropped_faint += 1
+            self.meta["faint"] = True
+            log.info(f"A faint sound (level {level:.0f}, the voice is about {self.voice_level:.0f}) -- not a phrase")
+            return None
+        return out
 
     def feed(self, buf):
         e = _rms(buf, self.width)
@@ -606,7 +646,8 @@ class Endpointer:
         if not self.active:
             self.ring.append(buf)
             self.ring_e.append(e)
-            self.loud = self.loud + 1 if e > self.thr else 0
+            gate = self._gate()
+            self.loud = self.loud + 1 if e > gate else 0
             if self.loud >= self.start_n:
                 self.active = True
                 self.frames = list(self.ring)            # the run-up is kept, always
@@ -620,12 +661,14 @@ class Endpointer:
                     lead += 1
                 self.meta = {"lead_ms": int(lead * self.sec * 1000), "gate": int(self.thr),
                              "clipped_start": bool(self.ring_e) and self.ring_e[0] > quiet}
+                self.levels = list(self.ring_e)
                 self.ring_e.clear()
                 self.speech, self.silent = self.loud * self.sec, 0
                 self.ring.clear()
             return None
         self.frames.append(buf)
-        if e > self.thr * 0.75:                          # hysteresis: trailing-off words still count
+        self.levels.append(e)
+        if e > self._gate() * 0.75:                      # hysteresis: trailing-off words still count
             self.speech += self.sec
             self.silent = 0
         else:
@@ -634,16 +677,85 @@ class Endpointer:
         if self.silent * self.sec >= needed:
             keep = len(self.frames) - self.silent + self.tail_n
             out, speech = b"".join(self.frames[:keep]), self.speech
-            self._reset()
-            return out if speech >= self.min_speech else None
+            return self._finish(out, speech)
         if len(self.frames) * self.sec >= self.limit:
             out = b"".join(self.frames)
             log.warning(f"Speech reached the {self.limit:g} s limit and was cut there (config.STT_PHRASE_TIME_LIMIT)")
             tail = self.frames[-self.tail_n:]
+            self.meta = dict(self.meta, level=int(self.loudness(self.levels)))
             self._reset()
             self.active, self.frames, self.speech = True, list(tail), self.sec   # the rest goes on, unclipped
             return out
         return None
+
+
+class VoiceLevel:
+    """How loud the person's voice is on this microphone, learnt from phrases that were UNDERSTOOD.
+
+    2026-11-10, from the kept phrases of 2026-10-28 (earbuds, gate 12): real requests peaked at a level of
+    4,500-10,000; the four phrases the recogniser returned empty peaked at 29-154 -- breaths and bumps fifty
+    times quieter than the voice, yet above a gate of 12. Each cost a recognition call and, worse, kept
+    the microphone "in a phrase" while a real request began. The level is the median of the last understood
+    phrases (three are enough), kept per device in ~/.eva/hearing/voice_level.json so she starts a session
+    already knowing it. Safety: if three sounds in a row are dropped as faint, the level is forgotten and
+    learnt again -- a microphone turned down must not leave her deaf. Pure apart from the file."""
+    NEEDED, KEEP, FORGET_AFTER = 3, 12, 3
+
+    def __init__(self, path=None, device=""):
+        self.path, self.device = path, device or "default"
+        self.samples, self.faint_run = [], 0
+        if path:
+            try:
+                import json as _json
+                with open(path, encoding="utf-8") as f:
+                    self.samples = [float(v) for v in (_json.load(f).get(self.device) or [])][-self.KEEP:]
+            except Exception:
+                self.samples = []
+
+    def level(self):
+        if len(self.samples) < self.NEEDED:
+            return None
+        v = sorted(self.samples)
+        return v[len(v) // 2]
+
+    def understood(self, level):
+        """A phrase of this loudness was recognised as words."""
+        if not level or level <= 0:
+            return
+        self.faint_run = 0
+        self.samples = (self.samples + [float(level)])[-self.KEEP:]
+        self._save()
+
+    def faint(self):
+        """A sound was dropped as too faint. Three in a row: forget, and learn again."""
+        self.faint_run += 1
+        if self.faint_run >= self.FORGET_AFTER:
+            log.warning("Three faint sounds in a row -- forgetting the learnt voice level and learning it again")
+            self.samples, self.faint_run = [], 0
+            self._save()
+            return True
+        return False
+
+    def _save(self):
+        if not self.path:
+            return
+        try:
+            import json as _json
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            data = {}
+            try:
+                with open(self.path, encoding="utf-8") as f:
+                    data = _json.load(f)
+            except Exception:
+                data = {}
+            data[self.device] = [round(v) for v in self.samples]
+            with open(self.path, "w", encoding="utf-8") as f:
+                _json.dump(data, f)
+        except Exception as e:
+            log.debug(f"Could not keep the voice level: {e}")
+
+
+_voice_level = {"vl": None}
 
 
 class _ContinuousListener:
@@ -727,6 +839,10 @@ class _ContinuousListener:
             except Exception:
                 log.exception("A capture-started hook failed")
         settle = int(0.5 * rate / chunk)       # the first 0.5 s is the device switching on (a burst of ~100)
+        vl = _voice_level["vl"] if getattr(config, "STT_LEARN_VOICE_LEVEL", True) else None
+        if vl is not None and vl.level():
+            log.info(f"Microphone: the voice on this device is about {vl.level():.0f}; fainter sounds are not phrases")
+        dropped = 0
         while self.running.is_set():
             buf = stream.read(chunk)
             if not buf:
@@ -734,7 +850,12 @@ class _ContinuousListener:
             if settle > 0:
                 settle -= 1
                 continue
+            if vl is not None:
+                ep.voice_level = vl.level()
             phrase = ep.feed(buf)
+            if vl is not None and ep.dropped_faint != dropped:
+                dropped = ep.dropped_faint
+                vl.faint()
             if phrase and self.running.is_set():
                 seconds = len(phrase) / float(rate * width)
                 audio = sr.AudioData(phrase, rate, width)
@@ -911,12 +1032,17 @@ def start_always_listening(on_heard, on_error=None):
                      f"pause={_recognizer.pause_threshold} phrase_limit={config.STT_PHRASE_TIME_LIMIT}")
         else:
             _recognizer.energy_threshold = _calibration["energy"]
+        if _voice_level["vl"] is None:
+            _voice_level["vl"] = VoiceLevel(os.path.join(HEARING_DIR, "voice_level.json"), _device_name())
 
         def callback(recognizer, audio):
             try:
                 text = recognize(recognizer, audio)
                 keep_phrase(audio, text)
                 if text:
+                    vl = _voice_level["vl"]
+                    if vl is not None and not is_speaking():     # never learn her own voice coming back
+                        vl.understood((getattr(audio, "eva_meta", None) or {}).get("level"))
                     on_heard(text)
             except sr.UnknownValueError:
                 keep_phrase(audio, "")
@@ -972,6 +1098,7 @@ def recalibrate_mic():
     re-measures the room. For a deliberate call (moved rooms, changed
     headset) -- not run automatically, for the reason above."""
     _calibration["energy"] = None
+    _voice_level["vl"] = None                 # the device may have changed: its level is looked up again
 
 
 def is_listening() -> bool:

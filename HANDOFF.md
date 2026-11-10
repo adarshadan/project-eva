@@ -1867,3 +1867,26 @@ Ranked by value for Eva (free models, weak laptop). Nothing built yet.
 9. Specialist personas with own memory and routines (Rakazo, OpenMausBot) -- low priority for a single avatar.
 Trials pending: Nemotron 3 Nano Omni (quick look + direct audio), Parakeet v3 vs canary-1b, Kokoro offline voice,
 LFM3 speed on the i5. Rejected: JEV-27B-VL (no free host), grok-bot-app/grok-bot (fake "official" repo, malware risk).
+
+## 68. Next level, work in progress (2026-11-10) -- branch next-level-wip, NOT yet deployed to the PC
+Built (code here, checks added as "next level: hearing, second provider, fast reader, coding helper, being shown";
+the full check run was interrupted -- run python run_checks.py first):
+1. Hearing: voice.VoiceLevel learns the person's loudness; sounds far fainter are not phrases (replay of the
+   2026-10-28 kept phrases: 4 of 4 empty ones dropped, 16 of 16 real kept). runtime joins unfinished phrases
+   ("Perfect. Can you" waits 3 s). stt_nvidia retries in English when canary answers in another script.
+2. Second provider: stt_groq.py (Whisper, needs set_key.bat GROQ_API_KEY); OpenRouter free models added to
+   MODEL_FALLBACKS / VISION_FALLBACK_MODELS (need set_key.bat OPENROUTER_API_KEY; skipped without).
+3. Coding helper: coder.py + core/toolset/coder.py (code_task, code_status, cancel_code_task). Live on the PC:
+   OpenCode CLI at %LOCALAPPDATA%\Programs\@opencodedesktop\resources\opencode-cli.exe; DeepSeek V4.1 Flash Free
+   and GLM 5.3 Flash Free each built and ran a script in 9 s; a job outside a git repo cannot write outside its
+   folder (opencode.json external_directory deny). Inside a git repo the repo root is the boundary.
+4. Fast reader: core/reader.py (Nemotron Nano Omni reads long pages whole, 1.7 s for 24,000 chars; one page came
+   back empty -> retry with thinking added, not yet re-tested). nvidia/nemotron-3.5-lightning-30b-a3b exists: try it.
+5. Scorecard: 23 tasks (added minimise, close-window, copy-file, find-nested, clipboard, long-page, code). Not run yet.
+6. Show her once: watch.py (watch_me, stop_watching): the person's clicks/typing/keys in words; passwords hidden.
+ASR trial on the kept phrases (tools/asr_trial.txt on the PC, was still running): parakeet and whisper heard
+"C drive" and "WizTree" where canary heard "sea drive"/"WINSTRE"; whisper invents words on silence. Decide the
+recogniser from the finished file.
+TODO: finish checks; deploy; restart; run scorecard; reader trial with lightning; then the lifelike work
+(body and cloth motion, personality, staying out of the way, dancing to music, interacting with windows).
+The PC has untracked test leftovers: tools/jobs/coder_escape.txt, Documents\Eva\code\_contain_test_*.

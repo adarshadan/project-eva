@@ -54,28 +54,49 @@ def _service(model):
         return _state["service"]
 
 
-def transcribe(wav: bytes, clock=time.monotonic):
+def latin(text) -> bool:
+    """Is this written in Latin letters? (2026-10-28 10:18: canary-1b wrote an English sentence in
+    Devanagari -- "बड्डी इट्स ओपन ..." for "Buddy, it's open ..." -- and the model could not use it.)"""
+    letters = [c for c in str(text or "") if c.isalpha()]
+    if not letters:
+        return True
+    return sum(1 for c in letters if c.isascii() or "\u00c0" <= c <= "\u024f") / len(letters) >= 0.6
+
+
+def _recognise(model, wav, clock):
+    import riva.client
+    try:
+        import providers
+        providers.pace("nvidia/asr")              # the same per-key budget as every other request
+    except Exception:
+        pass
+    cfg = riva.client.RecognitionConfig(language_code=MODELS[model][1], max_alternatives=1,
+                                        enable_automatic_punctuation=True, audio_channel_count=1,
+                                        sample_rate_hertz=16000,
+                                        encoding=riva.client.AudioEncoding.LINEAR_PCM)
+    t = clock()
+    resp = _service(model).offline_recognize(wav, cfg)
+    text = " ".join(r.alternatives[0].transcript.strip() for r in resp.results if r.alternatives).strip()
+    log.info(f"NVIDIA {model} heard {text!r} in {clock() - t:.2f} s")
+    return text
+
+
+def transcribe(wav: bytes, clock=time.monotonic, recognise=None):
     if not enabled() or clock() < _state["resting_until"]:
         return None
     model = str(getattr(config, "STT_NVIDIA_MODEL", "parakeet-tdt-0.6b-v2"))
     if model not in MODELS:
         log.warning(f"Unknown STT_NVIDIA_MODEL {model!r}; using Google")
         return None
+    recognise = recognise or _recognise
     try:
-        import riva.client
-        try:
-            import providers
-            providers.pace("nvidia/asr")              # the same per-key budget as every other request
-        except Exception:
-            pass
-        cfg = riva.client.RecognitionConfig(language_code=MODELS[model][1], max_alternatives=1,
-                                            enable_automatic_punctuation=True, audio_channel_count=1,
-                                            sample_rate_hertz=16000,
-                                            encoding=riva.client.AudioEncoding.LINEAR_PCM)
-        t = clock()
-        resp = _service(model).offline_recognize(wav, cfg)
-        text = " ".join(r.alternatives[0].transcript.strip() for r in resp.results if r.alternatives).strip()
-        log.info(f"NVIDIA {model} heard {text!r} in {clock() - t:.2f} s")
+        text = recognise(model, wav, clock)
+        retry = str(getattr(config, "STT_ENGLISH_RETRY_MODEL", "") or "")
+        if text and not latin(text) and retry in MODELS and retry != model:
+            again = recognise(retry, wav, clock)
+            if again and latin(again):
+                log.info(f"{model} answered in another script; using {retry}: {again!r}")
+                text = again
         return text
     except Exception as e:
         _state["resting_until"] = clock() + float(getattr(config, "STT_NVIDIA_RETRY_SECONDS", 60))

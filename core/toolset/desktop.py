@@ -4,6 +4,7 @@ import os
 
 import desktop_control as dc
 import recorder
+import watch
 import ui_navigate
 import vision
 from core.effects import Effect as E, Surface as S, element_effect, hotkey_effect
@@ -244,6 +245,16 @@ register("locate_on_screen", "THE way to find something on screen in ANY window 
          describe=lambda a: f"Looking for {_short(a.get('description'))}")
 
 # ---- teach and repeat ---------------------------------------------------------------
+register("watch_me", "The person wants to SHOW you how to do something ('watch me', 'let me show you', 'learn "
+         "this'): start watching their clicks, typing and key presses. They do the task once; when they say "
+         "they are done, call stop_watching to get the steps and save them as a skill.",
+         {"task": STR("What they are about to show, in a few words.")},
+         surface=S.SCREEN, effect=E.OBSERVE, fn=watch.start, verb="look", deadline=15,
+         describe=lambda a: "Watching how you do it")
+register("stop_watching", "The person finished showing you: returns what they did, step by step, to turn into a "
+         "skill with save_skill.",
+         surface=S.SCREEN, effect=E.OBSERVE, fn=watch.stop, verb="look", deadline=20,
+         describe=lambda a: "Writing down what I saw")
 register("start_recording", "Start watching the person's clicks and keys to learn a task under a name.",
          {"name": STR()}, ["name"], surface=S.SCREEN, effect=E.INTERACT, fn=recorder.start_recording)
 register("stop_recording", "Stop and save the current recording.",

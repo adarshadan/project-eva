@@ -28,3 +28,12 @@ def install(ctx):
     registry.bind("helpers_status", helpers.status)
     registry.bind("cancel_helper", lambda helper=None: helpers.cancel(helper))
     runtime._stop_hooks.append(helpers.cancel_all)       # "stop" stops the helpers too
+
+    # The coding helper (coder.py): its report reaches Eva the same way a helper's does.
+    import coder
+
+    def on_code_done(job):
+        log.info(f"Coding job #{job.id} {job.status}: telling Eva.")
+        runtime.submit(coder.report_note(job), "scheduled")
+    coder.CODER.on_done = on_code_done
+    runtime._stop_hooks.append(coder.CODER.cancel_all)     # "stop" stops coding jobs too

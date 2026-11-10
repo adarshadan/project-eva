@@ -70,8 +70,13 @@ GROUPS = {
               "sit_on_window", "activity_status", "adjust_activity")),
     "helpers": ("helpers that work in the background for you",
                 ("delegate", "agent_message", "helpers_status", "cancel_helper")),
-    "recordings": ("teach-and-repeat recordings of the person's steps",
-                   ("start_recording", "stop_recording", "list_recordings", "run_recording")),
+    "coding": ("programming jobs handed to a coding helper (OpenCode): write scripts and small programs, build "
+               "pages and tools, fix or explain code",
+               ("code_task", "code_status", "cancel_code_task")),
+    "recordings": ("learning by being shown: watch the person do a task once and save it as a skill; "
+                   "recordings of your own steps to repeat",
+                   ("watch_me", "stop_watching", "start_recording", "stop_recording", "list_recordings",
+                    "run_recording")),
     "office": ("email drafts and calendar events", ("draft_email", "add_calendar_event")),
     "self": ("your own past: failed tasks and their replays, forgetting everything",
              ("failed_tasks", "show_failed_task", "forget_all")),

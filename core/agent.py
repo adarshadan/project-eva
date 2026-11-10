@@ -343,6 +343,12 @@ class Agent:
             if pending_undo and result.get("ok"):
                 result = {**result, "undo": "this change can be undone with undo_last_change"}
         result = self._add_remembered_hints(name, args, result)
+        try:
+            from core import reader
+            if reader.wanted(name, result):                 # bulky text: a fast model reads all of it
+                result = reader.digest(name, result, getattr(self.turn, "text", ""))
+        except Exception:
+            log.exception("The fast reader failed; passing the text on as it is")
         result = _cap_tool_result(name, result)
         result = _redact_secrets(result)
         log.info(f"Tool result: {name} -> {result}")
@@ -385,7 +391,7 @@ class Agent:
         except Exception:
             log.exception("Could not refresh the tool groups")
         from core import workers
-        if workers.is_helper_note(text):
+        if workers.is_helper_note(text) or text.startswith("[system] Coding job #"):
             self.turn.tainted = True       # a helper's report may carry web text: never learned from
         self._memory_text = self._context_block(text)
         mark_turn = len(self.messages) - 1

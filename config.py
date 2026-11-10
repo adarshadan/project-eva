@@ -32,7 +32,11 @@ MODEL_ID = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 # Benchmark 2026-10-28 (16 tasks, fallbacks off): 3.5 Super VL 16/16 in 158 s; 3 Ultra 13/16 in 408 s (the 3
 # failures were a console-echo crash since fixed); MiniMax M3.1 Flash 10/16, all 6 failures 429 rate limits.
 # glm-5.3, glm-5.3-flash, gpt-oss-20b timed out. None reported a false "done".
-MODEL_FALLBACKS = ("nvidia/nemotron-3-ultra-550b-a55b", "minimaxai/minimax-m3.1-flash")
+# 2026-11-10: a second free provider behind NVIDIA, so one provider being down or rate-limited does not stop
+# her. The "openrouter:" entries are skipped until a key is stored (free, no card: openrouter.ai -> Keys,
+# then set_key.bat OPENROUTER_API_KEY); its free tier is ~200 requests a day, so it is a backup only.
+MODEL_FALLBACKS = ("nvidia/nemotron-3-ultra-550b-a55b", "minimaxai/minimax-m3.1-flash",
+                   "openrouter:nvidia/nemotron-3.5-super-vl:free", "openrouter:thinkingmachines/inkling:free")
 # More OpenAI-compatible endpoints, or a changed preset:
 #   PROVIDERS = {"azure": {"base_url": "https://<name>.openai.azure.com/openai/v1", "key": "AZURE_OPENAI_KEY"}}
 PROVIDERS = {}
@@ -62,7 +66,9 @@ VISION_MASK_OWN_WINDOWS = True
 # Each one's coordinate convention is measured once (vision.py, calibrate).
 # Names from NVIDIA's catalogue; one your key cannot use is skipped by itself.
 VISION_FALLBACK_MODELS = ("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",   # the eye until 2026-10-17
-                          "google/gemma-4-31b-it")       # qwen3.5-122b answered 410 Gone (eva.log 2026-10-11 22:59)
+                          "google/gemma-4-31b-it",       # qwen3.5-122b answered 410 Gone (eva.log 2026-10-11 22:59)
+                          "openrouter:nvidia/nemotron-3.5-super-vl:free",    # the same eye on another host
+                          "openrouter:google/gemma-4-31b-it:free")
 # How the vision model's boxes are read: "auto" (measured per model, default),
 # or force "norm1000", "norm1000_yx", "norm1", "pixels".
 VISION_COORDS = "auto"
@@ -154,7 +160,7 @@ ONSCREEN_HANDOFF = 6        # after this many screen steps of her own in one tas
 CHECK_BEFORE_DONE = True    # after on-screen steps, one fresh look at the result before she says "done"
 # Requests per minute per provider, shared by every model call (text, vision, browser agent). NVIDIA's
 # free tier allows about 40 a minute per key across all models (observed, not published); 0 = no pacing.
-PROVIDER_RPM = {"nvidia": 30}     # 36 was too close: a fast model met 429s at ~35 a minute (2026-10-28)
+PROVIDER_RPM = {"nvidia": 30, "openrouter": 15, "groq": 20}     # 36 was too close: a fast model met 429s at ~35 a minute (2026-10-28)
 
 STT_OWN_ENDPOINTING = True
 STT_PREROLL_SECONDS = 1.0           # audio kept from BEFORE the voice crossed the gate
@@ -166,6 +172,9 @@ STT_INPUT_DEVICE = "auto"           # "auto": a connected headset/earbuds first,
 STT_MIN_GATE = 12                   # the loudness gate never goes below this (2026-10-28: room 4 on the laptop mic)
 STT_GATE_FACTOR = 3.0               # gate = the room's level x this (the switch-on click is skipped)
 STT_MAX_ENERGY_THRESHOLD = 1200     # ceiling, so a noisy calibration cannot deafen Eva
+STT_LEARN_VOICE_LEVEL = True        # learn how loud the person's voice is; far fainter sounds are not phrases
+STT_JOIN_UNFINISHED_SECONDS = 3.0   # "Perfect. Can you" waits this long for the rest before it is sent (0 = off)
+STT_ENGLISH_RETRY_MODEL = "parakeet-tdt-0.6b-v2"   # used when the main recogniser answers in another script
 
 # Edge neural voice. `edge-tts --list-voices` for the catalogue; names
 # follow <locale>-<Name>Neural, e.g. "en-GB-SoniaNeural", "en-US-GuyNeural".
@@ -356,7 +365,21 @@ HOTKEY_STOP = "<cmd>+<shift>+x"
 
 # --- Helpers (background workers, core/workers.py) -----------------------------
 # How many may work at once. Each makes its own calls to the model.
+# The fast reader (core/reader.py): a small quick model reads bulky pages and transcripts in full and hands
+# the main model only what the request needs.
+READER_ENABLED = True
+READER_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+READER_OVER_CHARS = 7000            # texts longer than this go through the reader
+READER_BUDGET_CHARS = 4500          # the extract's size
+READER_MAX_INPUT_CHARS = 120000
+READER_TIMEOUT = 30
 HELPER_MAX = 3
+# The coding helper (coder.py): OpenCode's free models do programming jobs in the background.
+CODER_CLI = ""                      # empty = found by itself (the OpenCode desktop app's opencode-cli.exe, or PATH)
+CODER_MODELS = ("opencode/deepseek-v4.1-flash-free", "opencode/glm-5.3-flash-free", "opencode/big-pickle")
+CODER_MAX_SECONDS = 900             # one job's time limit
+CODER_MAX_JOBS = 2
+CODER_ROOT = ""                     # empty = Documents\\Eva\\code
 
 # --- Avatar size ---------------------------------------------------------------
 # 1.0 = the original 200 x 380 px; 0.5 = half that size (the person's choice,
@@ -384,6 +407,10 @@ POSE_TUNING = {}
 STT_BACKEND = "nvidia"
 STT_NVIDIA_MODEL = "canary-1b"
 STT_NVIDIA_RETRY_SECONDS = 60
+STT_GROQ_FALLBACK = True            # Groq's free Whisper when NVIDIA's recogniser fails (needs GROQ_API_KEY)
+STT_GROQ_MODEL = "whisper-large-v3-turbo"
+STT_GROQ_TIMEOUT = 8
+STT_GROQ_RETRY_SECONDS = 60
 STT_LOCAL_URL = "http://127.0.0.1:8000"
 STT_LOCAL_API_KEY = ""
 STT_LOCAL_TIMEOUT = 15

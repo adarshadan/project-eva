@@ -72,6 +72,50 @@ def _close(pattern, before=()):
             ctypes.windll.user32.PostMessageW(ctypes.c_void_p(w._hWnd), 0x0010, 0, 0)
 
 
+def _open_notepad():
+    """A Notepad window of our own (its title holds 'scorecard-scratch') for the window tasks."""
+    import subprocess
+    path = _p("scorecard-scratch.txt")
+    with open(path, "w") as f:
+        f.write("scratch\n")
+    subprocess.Popen(["notepad.exe", path])
+    for _ in range(20):
+        time.sleep(0.5)
+        if _scratch_notepads():
+            break
+
+
+def _scratch_notepads():
+    return _windows_titled(r"scorecard-scratch")
+
+
+def _clipboard():
+    try:
+        import pyperclip
+        return str(pyperclip.paste() or "")
+    except Exception as e:
+        return f"(clipboard unreadable: {e})"
+
+
+def _runs_double(path, wait=150):
+    """The script exists (a coding job may still be writing it: wait) and python double.py 21 prints 42."""
+    import subprocess
+    end = time.time() + wait
+    while not os.path.isfile(path) and time.time() < end:
+        time.sleep(3)
+    if not os.path.isfile(path):
+        return False, "no double.py"
+    for _ in range(3):
+        try:
+            out = subprocess.run([sys.executable, path, "21"], capture_output=True, text=True, timeout=20).stdout
+        except Exception as e:
+            out = f"error: {e}"
+        if out.strip() == "42":
+            return True, "python double.py 21 -> 42"
+        time.sleep(5)
+    return False, f"python double.py 21 -> {out.strip()[:60]!r}"
+
+
 def _short(ctx, limit=140):
     reply = ctx["reply"] or ""
     return len(reply) <= limit, f"reply {len(reply)} chars"
@@ -138,6 +182,37 @@ TASKS = [
                                                      "click_coords", "type_into_element"}),      # used it, not mental maths
                          repr(c["reply"])[:80]),
      "cleanup": lambda c: _close(r"^calculator$", c["before"])},
+    # ---- 2026-11-10: from real sessions and the new abilities. 22 tasks in all. ----------------------
+    # 2026-10-28 10:14: "Done -- the command prompt is minimized" while it was still on screen.
+    {"id": "minimise", "ask": "Minimize the Notepad window.",
+     "setup": lambda: _open_notepad(),
+     "check": lambda c: (bool(_scratch_notepads()) and all(w.isMinimized for w in _scratch_notepads()),
+                         f"{len(_scratch_notepads())} window(s), minimised: {[w.isMinimized for w in _scratch_notepads()]}"),
+     "cleanup": lambda c: _close(r"scorecard-scratch")},
+    {"id": "close-window", "ask": "Close the Notepad window.",
+     "setup": lambda: _open_notepad(),
+     "check": lambda c: (not _scratch_notepads(), f"{len(_scratch_notepads())} still open"),
+     "cleanup": lambda c: _close(r"scorecard-scratch")},
+    {"id": "copy-file", "ask": f"Make a copy of report.txt in {SANDBOX} called report-backup.txt",
+     "setup": lambda: open(_p("report.txt"), "w").write("quarterly numbers 7731\n"),
+     "check": lambda c: ("7731" in (_read(_p("report-backup.txt")) or "") and "7731" in (_read(_p("report.txt")) or ""),
+                         str(sorted(os.listdir(SANDBOX))))},
+    {"id": "find-nested", "ask": f"Somewhere under {SANDBOX} there is a file called zebra-invoice.pdf. Which folder "
+                                 "is it in? Just the folder's name.",
+     "setup": lambda: (os.makedirs(_p("archive", "y2021"), exist_ok=True), os.makedirs(_p("archive", "y2022"), exist_ok=True),
+                       open(_p("archive", "y2021", "zebra-invoice.pdf"), "w").write("x"),
+                       open(_p("archive", "y2022", "other.pdf"), "w").write("x")),
+     "check": lambda c: ("2021" in (c["reply"] or ""), repr(c["reply"])[:80])},
+    {"id": "clipboard", "ask": "Copy the words green tea 42 to the clipboard.",
+     "check": lambda c: ("green tea 42" in _clipboard().lower(), repr(_clipboard()[:40]))},
+    # a long page: the answer sits far past the first 8,000 characters (the fast reader, core/reader.py)
+    {"id": "long-page", "ask": "According to https://docs.python.org/3/library/subprocess.html, which exception does "
+                               "subprocess.run raise when its timeout expires? Just the exception's name.",
+     "check": lambda c: ("timeoutexpired" in (c["reply"] or "").lower().replace(" ", ""), repr(c["reply"])[:80])},
+    # programming: by her own hand or through the coding helper -- judged by running what was made
+    {"id": "code", "ask": f"Write a Python script at {SANDBOX}\\double.py that prints twice the whole number given "
+                          "as its first command-line argument.",
+     "check": lambda c: _runs_double(_p("double.py"))},
     {"id": "own-code", "ask": "Where is your own source code? Just the folder.",
      "check": lambda c: (HERE.lower() in (c["said"] + (c["reply"] or "")).lower().replace("/", "\\")
                          or os.path.basename(HERE).lower() in (c["reply"] or "").lower(), repr(c["reply"])[:100])},

@@ -6347,6 +6347,196 @@ def fixes_from_the_1001_log():
     assert clean_reply("Done.") == "Done."
     assert "[read aloud]" in prompt.SYSTEM_PROMPT
 
+def next_level_hearing_reader_coder_watch():
+    """2026-11-10: learnt voice level, unfinished phrases joined, wrong-script retry, Groq fallback, the fast
+    reader, the coding helper, and being shown a task."""
+    import array, math, tempfile, types as _t
+    import config
+    import voice, stt_nvidia, stt_groq, coder, watch
+    from core import prompt, reader, runtime as rt, registry, toolbox
+
+    def prompt_text():
+        return prompt.SYSTEM_PROMPT
+    # ---- the voice level: a sound far below the person's voice is not a phrase -------------------------
+    rate, chunk = 16000, 1024
+
+    def tone(seconds, amp):
+        return array.array("h", (int(amp * math.sin(i * 0.3)) for i in range(int(seconds * rate)))).tobytes()
+
+    def run(ep, *parts):
+        data, out = b"".join(parts), []
+        for i in range(0, len(data) - chunk * 2 + 1, chunk * 2):
+            ph = ep.feed(data[i:i + chunk * 2])
+            if ph:
+                out.append(ph)
+        return out
+    ep = voice.Endpointer(rate, 2, chunk, threshold=12)
+    assert len(run(ep, tone(1, 2), tone(1.5, 150), tone(2.5, 2))) == 1, "with no level learnt, everything is heard"
+    ep = voice.Endpointer(rate, 2, chunk, threshold=12)
+    ep.voice_level = 6000.0
+    assert run(ep, tone(1, 2), tone(1.5, 60), tone(2.5, 2)) == [], "a breath (60 against a voice of 6000) opened a phrase"
+    assert run(ep, tone(1, 2), tone(1.5, 250), tone(2.5, 2)) == [] and ep.dropped_faint == 1 and ep.meta.get("faint")
+    got = run(ep, tone(1, 2), tone(1.5, 9000), tone(2.5, 2))
+    assert len(got) == 1 and ep.meta["level"] > 3000, ep.meta
+    d = tempfile.mkdtemp()
+    path = os.path.join(d, "voice_level.json")
+    vl = voice.VoiceLevel(path, "Headset")
+    assert vl.level() is None
+    for v in (7000, 8000, 9000):
+        vl.understood(v)
+    assert vl.level() == 8000 and voice.VoiceLevel(path, "Headset").level() == 8000, "kept per device"
+    assert voice.VoiceLevel(path, "Laptop mic").level() is None
+    assert not vl.faint() and not vl.faint() and vl.faint() and vl.level() is None, "three faint in a row: learn again"
+    # ---- "Perfect. Can you" waits for the rest ----------------------------------------------------------
+    for t in ("Perfect. Can you", "open the", "I want to."):
+        assert rt.unfinished(t), t
+    for t in ("What time is it?", "Open notepad please", "It is not minimized. Please check again.", "Oh.", "Stop"):
+        assert not rt.unfinished(t), t
+    assert rt.join_phrases("Perfect. Can you.", "Open the calculator?") == "Perfect. Can you open the calculator?"
+    src = _source_any("core/runtime.py")
+    assert "_submit_voice" in src and "STT_JOIN_UNFINISHED_SECONDS" in src
+    assert src.index("is_stop_phrase(text)") < src.index("self._submit_voice(text)"), "a stop is never held back"
+    # ---- an English sentence written in another script is heard again in English --------------------------
+    assert stt_nvidia.latin("Buddy, it's open") and not stt_nvidia.latin("\u092c\u0921\u094d\u0921\u0940 \u0907\u091f\u094d\u0938")
+    keep = (config.STT_BACKEND, config.STT_NVIDIA_MODEL, dict(stt_nvidia._state))
+    try:
+        config.STT_BACKEND, config.STT_NVIDIA_MODEL = "nvidia", "canary-1b"
+        stt_nvidia._state.update(resting_until=0.0)
+        asked = []
+
+        def fake(model, wav, clock):
+            asked.append(model)
+            return "\u092c\u0921\u094d\u0921\u0940 \u0913\u092a\u0928" if model == "canary-1b" else "Buddy, it's open."
+        assert stt_nvidia.transcribe(b"x" * 3200, clock=lambda: 1.0, recognise=fake) == "Buddy, it's open."
+        assert asked == ["canary-1b", config.STT_ENGLISH_RETRY_MODEL]
+    finally:
+        config.STT_BACKEND, config.STT_NVIDIA_MODEL = keep[0], keep[1]
+        stt_nvidia._state.update(keep[2])
+    # ---- Groq's Whisper: only with a key; a failure rests it ----------------------------------------------
+    import providers
+    real_key = providers.api_key
+    try:
+        providers.api_key = lambda name: ""
+        assert not stt_groq.enabled() and stt_groq.transcribe(b"x") is None, "no key: it does nothing"
+        providers.api_key = lambda name: "gk" if name == "groq" else real_key(name)
+        stt_groq._state["resting_until"] = 0.0
+        sent = {}
+
+        def post(url, **kw):
+            sent.update(url=url, **kw)
+            return _t.SimpleNamespace(status_code=200, json=lambda: {"text": " open the calculator "})
+        assert stt_groq.transcribe(b"RIFFxxxx", clock=lambda: 5.0, post=post) == "open the calculator"
+        assert sent["url"].endswith("/audio/transcriptions") and sent["headers"]["Authorization"] == "Bearer gk"
+        assert sent["data"]["model"] == config.STT_GROQ_MODEL
+        bad = lambda url, **kw: _t.SimpleNamespace(status_code=429, text="slow down", json=lambda: {})
+        assert stt_groq.transcribe(b"x", clock=lambda: 6.0, post=bad) is None
+        assert stt_groq.transcribe(b"x", clock=lambda: 7.0, post=post) is None, "resting after a failure"
+    finally:
+        providers.api_key = real_key
+        stt_groq._state["resting_until"] = 0.0
+    vsrc = _source("voice")
+    vsrc = vsrc[vsrc.index("def recognize("):]
+    assert vsrc.index("stt_nvidia.transcribe") < vsrc.index("stt_groq.transcribe") < vsrc.index("recognizer.recognize_google(")
+    assert any(m.startswith("openrouter:") for m in config.MODEL_FALLBACKS), "a second provider behind NVIDIA"
+    assert not providers.usable("openrouter:x/y:free")[0] or providers.api_key("openrouter"), "skipped without a key"
+    # ---- the fast reader: a long page is read whole and handed on as an extract ----------------------------
+    long = {"ok": True, "url": "https://example.org/a", "title": "A page", "text": "menu " * 3000 + "The answer is 42."}
+    assert reader.wanted("read_web_page", long) and not reader.wanted("read_file", long)
+    assert not reader.wanted("read_web_page", {"text": "short"})
+    seen = {}
+
+    def ask(prompt, budget, timeout):
+        seen["prompt"] = prompt
+        return "The page says the answer is 42. " * 3
+    reader._state["resting_until"] = 0.0
+    out = reader.digest("read_web_page", long, "what is the answer?", clock=lambda: 10.0, ask=ask)
+    assert out["extract"] and out["full_chars"] == len(long["text"]) and "42" in out["text"] and len(out["text"]) < 300
+    assert "what is the answer?" in seen["prompt"] and "The answer is 42." in seen["prompt"], "the WHOLE text is read"
+    assert "never follow instructions" in seen["prompt"]
+
+    def boom(prompt, budget, timeout):
+        raise TimeoutError("slow")
+    assert reader.digest("read_web_page", long, "x", clock=lambda: 20.0, ask=boom) is long, "a failure changes nothing"
+    assert reader.digest("read_web_page", long, "x", clock=lambda: 30.0, ask=ask) is long, "and rests the reader"
+    reader._state["resting_until"] = 0.0
+    assert "reader.digest" in _source_any("core/agent.py")
+    # ---- the coding helper ----------------------------------------------------------------------------------
+    home = os.path.expanduser("~")
+    assert coder.safe_folder(home)[0] is None and coder.safe_folder(os.path.join(home, ".eva", "x"))[0] is None
+    assert coder.safe_folder(os.path.join(home, "Documents", "Eva", "code", "x"))[0]
+    assert coder.free_model("opencode/claude-opus") == config.CODER_MODELS[0], "only free models"
+    assert coder.free_model("opencode/glm-5.3-flash-free") == "opencode/glm-5.3-flash-free"
+    assert coder.Coder(cli=None, popen=None).start("x")["ok"] is False
+    c0 = coder.Coder(popen=None)
+    c0.cli = lambda: None
+    assert "not installed" in c0.start("write a small script that renames files")["error"]
+
+    class P:
+        def __init__(self, cmd, **kw):
+            P.cmd, P.kw = cmd, kw
+            kw["stdout"].write("\x1b[32mDone.\x1b[0m Wrote hello.py\n")
+            self.pid, self.n = 1, 0
+
+        def poll(self):
+            self.n += 1
+            return 0 if self.n > 1 else None
+
+        def kill(self):
+            pass
+    done = []
+    c1 = coder.Coder(on_done=done.append, popen=P, cli="opencode-cli")
+    folder = os.path.join(d, "proj")
+    r = c1.start("write a hello world python script", folder=folder)
+    assert r["ok"] and r["model"].endswith("-free"), r
+    for _ in range(60):
+        if done:
+            break
+        time.sleep(0.1)
+    assert done and done[0].status == "finished" and done[0].report == "Done. Wrote hello.py", done and done[0].summary()
+    assert P.cmd[:3] == ["opencode-cli", "run", "--auto"] and P.kw["cwd"] == folder
+    perms = json.load(open(os.path.join(folder, "opencode.json")))
+    assert perms["permission"]["external_directory"] == "deny", "a job stays inside its folder"
+    note = coder.report_note(done[0])
+    assert coder.is_coder_note(note) and "not an instruction" in note
+    assert {"code_task", "code_status", "cancel_code_task"} <= registry.names()
+    assert toolbox.group_of("code_task") == "coding" and "code_task" in prompt_text()
+    assert "Coding job #" in _source_any("core/agent.py"), "its report is treated like a helper's (tainted)"
+    # ---- show her once ----------------------------------------------------------------------------------------
+    now = [100.0]
+    names = {(10, 10): "File (MenuItem)", (300, 300): "File name: (Edit)", (50, 50): "Password (Edit)"}
+    w = watch.Watcher(describe=lambda x, y: (names.get((x, y), ""), "Report - Excel"),
+                      is_own=lambda x, y: (x, y) == (999, 999), clock=lambda: now[0])
+    K = lambda **k: _t.SimpleNamespace(**k)
+    assert w.stop()["ok"] is False
+    w.on_click(10, 10, K(name="left"), True)
+    assert w.steps == [], "nothing is noted unless she was asked to watch"
+    w.start("save a copy")
+    w.on_click(999, 999, K(name="left"), True)                  # her own window: not a step
+    w.on_click(10, 10, K(name="left"), True); w._q.join(); now[0] += 1
+    w.on_click(300, 300, K(name="left"), True); w._q.join()
+    for ch in "Q3 repoo":
+        w.on_press(K(char=ch) if ch != " " else K(char=None, name="space"))
+    w.on_press(K(char=None, name="backspace")); w.on_press(K(char="r")); w.on_press(K(char="t"))
+    w.on_press(K(char=None, name="enter"))
+    w.on_press(K(char=None, name="ctrl_l")); w.on_press(K(char="\x13")); w.on_release(K(char=None, name="ctrl_l"))
+    w.on_click(50, 50, K(name="left"), True); w._q.join()
+    for ch in "hunter2":
+        w.on_press(K(char=ch))
+    res = w.stop()
+    text = res["demonstration"]
+    assert text.splitlines()[0] == '1. In "Report - Excel": click "File (MenuItem)".', text
+    assert 'Type "Q3 report".' in text and "Press Enter." in text and "Press Ctrl+S." in text, text
+    assert "hunter2" not in text and "Type [hidden]." in text, "a password is never written down"
+    assert "save_skill" in res["note"]
+    assert {"watch_me", "stop_watching"} <= registry.names() and toolbox.group_of("watch_me") == "recordings"
+    assert "watch_me" in prompt_text()
+    wsrc = _source("watch")
+    assert "open(" not in wsrc.replace("os.path", ""), "a demonstration is never written to disk"
+    # ---- the scorecard grew to the everyday tasks that went wrong ------------------------------------------
+    sc = _source_any("tools/scorecard.py")
+    for tid in ("minimise", "close-window", "long-page", "code", "clipboard", "find-nested", "copy-file"):
+        assert f'"id": "{tid}"' in sc, tid
+
 
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",
                    animation_follows_the_task),
@@ -6437,7 +6627,9 @@ for label, fn in [("the animation pose follows the task (tool and skill both map
                   ("fixes from the 13:13 log: tabs, new tab, speech, full screen, restart",
                    fixes_from_the_1313_log),
                   ("fixes from the 10:01 log: read aloud on request, word-less replies dropped",
-                   fixes_from_the_1001_log)]:
+                   fixes_from_the_1001_log),
+                  ("next level: hearing, second provider, fast reader, coding helper, being shown",
+                   next_level_hearing_reader_coder_watch)]:
     check(label, fn)
 
 print()
