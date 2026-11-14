@@ -331,5 +331,143 @@ check('focus mode keeps her still: at most one glance in ten seconds (Phase 1)',
   assert(fidgeted, 'bored but not focused: she never fidgets');
 });
 
+// ---- Phase 4: music and dancing -------------------------------------------------------------
+// The page gets {playing, bpm, phase, energy, low, high} ~20x a second; the click track below has a beat
+// at every integer of (now - t0) * bpm / 60, so the phase it reports is what music.py would report.
+// Phrases are drawn at random; a seeded generator keeps these checks repeatable (restored at the end).
+const realRandom = Math.random;
+(function () { let s = 20261114; Math.random = () => { s = (s + 0x6D2B79F5) | 0; let x = Math.imul(s ^ (s >>> 15), 1 | s);
+  x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; }; })();
+const musicPayload = (over) => Object.assign({ playing: true, bpm: 120, phase: 0, energy: 0.7, low: 0.6, high: 0.4 }, over || {});
+function dancer(over) {
+  const w = world(); w.ctx.window.EVA_PRESENCE = true;
+  vm.runInContext('this.api.setMusic = window.setMusic; this.api.dance = () => dance;', w.ctx);
+  const run = stepper(w);
+  w.api.setWorld(worldPayload(over && over.world));
+  const t0 = w.now() + 0.37;                        // the first beat is not at the first frame
+  let sendAt = 0;
+  const d = {
+    w, run, t0,
+    play(seconds, o) {
+      o = Object.assign({ bpm: 120, energy: 0.7, send: true }, over || {}, o || {});
+      const frames = [];
+      for (let i = 0, n = Math.round(seconds * 30); i < n; i++) {
+        run.step();
+        const now = run.now();
+        if (o.send && now >= sendAt) {
+          sendAt = now + 0.05;
+          w.api.setMusic(musicPayload({ bpm: o.bpm, energy: o.energy, phase: (((now - t0) * o.bpm / 60) % 1 + 1) % 1,
+                                        playing: o.playing !== false }));
+        }
+        frames.push({ now, snap: snapshot(w.bones) });
+      }
+      return frames;
+    },
+  };
+  return d;
+}
+const rangeOf = (frames, key) => { const v = frames.map(f => f.snap[key]); return Math.max(...v) - Math.min(...v); };
+const armRange = (frames) => Math.max(...['leftUpperArm.z', 'rightUpperArm.z', 'leftUpperArm.x', 'rightUpperArm.x',
+  'leftLowerArm.y', 'rightLowerArm.y'].map(k => rangeOf(frames, k)));
+function worstStep(frames) {
+  let worst = 0;
+  for (let i = 1; i < frames.length; i++) worst = Math.max(worst, maxStep(frames[i - 1].snap, frames[i].snap));
+  return worst;
+}
+
+check('with music playing she moves on the beat: bounded, never snaps (Phase 4)', () => {
+  const d = dancer();
+  for (let i = 0; i < 30; i++) d.run.step();
+  const idle = d.play(4, { send: false });
+  const frames = d.play(14);
+  const D = d.w.api.dance();
+  assert(D.w > 0.9, `she did not start dancing (weight ${D.w.toFixed(2)})`);
+  assert(worstStep(idle.concat(frames)) <= MAX_PER_FRAME, `dancing snapped: ${worstStep(idle.concat(frames)).toFixed(3)} rad in one frame`);
+  for (const f of frames) {
+    for (const k in f.snap) if (!/\.py$/.test(k)) assert(Math.abs(f.snap[k]) < 3.0, `${k}=${f.snap[k].toFixed(2)} out of range`);
+    assert(Math.abs(f.snap['leftLowerArm.y']) < 2.75 && Math.abs(f.snap['rightLowerArm.y']) < 2.75, 'elbow over-bent');
+    assert(Math.abs(f.snap['hips.py'] - 0.8) < 0.15, `hips left their range (${f.snap['hips.py'].toFixed(3)})`);
+  }
+  const late = frames.filter(f => f.now > d.t0 + 8);
+  assert(rangeOf(late, 'hips.py') > 0.012, `no bounce: hips move only ${rangeOf(late, 'hips.py').toFixed(4)} m`);
+  assert(rangeOf(idle, 'hips.py') < 0.006, 'she bounced with no music');
+  // the knees give on the beat: folded over one beat, the hips are lowest at the beat (120 BPM = a beat every 0.5 s)
+  const bins = Array.from({ length: 10 }, () => []);
+  for (const f of late) bins[Math.floor((((f.now - d.t0) * 2) % 1) * 10)].push(f.snap['hips.py']);
+  const avg = bins.map(b => b.reduce((a, c) => a + c, 0) / Math.max(1, b.length));
+  const low = avg.indexOf(Math.min(...avg));
+  let off = (low + 0.5) / 10; if (off > 0.5) off -= 1;                      // beats from the beat
+  assert(Math.max(...avg) - Math.min(...avg) > 0.008, `the bounce does not follow the beat (${(Math.max(...avg) - Math.min(...avg)).toFixed(4)} m between beat and off-beat)`);
+  assert(Math.abs(off) * 500 < 90, `the hips are lowest ${Math.round(off * 500)} ms from the beat`);
+  assert(armRange(frames) > 0.2, `arms barely move (${armRange(frames).toFixed(2)} rad)`);
+});
+
+check('dance phrases last 8 or 16 beats, never repeat back to back, and vary (Phase 4)', () => {
+  for (const [bpm, energy] of [[120, 0.7], [128, 0.95], [75, 0.3]]) {
+    const d = dancer();
+    d.play(110, { bpm, energy });
+    const log = d.w.api.dance().log;
+    assert(log.length >= 6, `${bpm} BPM: only ${log.length} phrases in 110 s`);
+    for (let i = 0; i < log.length; i++) {
+      assert(log[i].len === 8 || log[i].len === 16, `${bpm} BPM: a phrase of ${log[i].len} beats`);
+      if (i) {
+        assert(log[i].sig !== log[i - 1].sig, `${bpm} BPM: "${log[i].sig}" twice in a row`);
+        assert(Math.abs((log[i].at - log[i - 1].at) - log[i - 1].len) < 1.0,
+          `${bpm} BPM: phrase ${i - 1} ran ${(log[i].at - log[i - 1].at).toFixed(1)} beats, not ${log[i - 1].len}`);
+      }
+    }
+    assert(new Set(log.map(p => p.sig)).size >= 4, `${bpm} BPM: only ${new Set(log.map(p => p.sig)).size} different phrases`);
+    assert(new Set(log.map(p => p.sig.split('/')[0])).size >= 3, `${bpm} BPM: the arms use too few patterns`);
+    if (bpm < 90) assert(log.every(p => p.tier === 'calm'), 'a slow song should get the calm sway');
+  }
+});
+
+check('intensity follows loudness, and a slow quiet song is a calm sway (Phase 4)', () => {
+  const measure = (bpm, energy) => {
+    const d = dancer(); d.play(6, { bpm, energy });
+    const late = d.play(12, { bpm, energy });
+    return { hips: rangeOf(late, 'hips.py'), arms: armRange(late), worst: worstStep(late) };
+  };
+  const quiet = measure(120, 0.15), loud = measure(120, 1.0), slow = measure(72, 0.3);
+  assert(loud.hips > quiet.hips * 1.3, `loud ${loud.hips.toFixed(4)} m vs quiet ${quiet.hips.toFixed(4)} m of bounce`);
+  assert(slow.hips < loud.hips && slow.arms < loud.arms + 0.4, 'the slow song is not calmer than the loud one');
+  for (const m of [quiet, loud, slow]) assert(m.worst <= MAX_PER_FRAME, `snapped ${m.worst.toFixed(3)}`);
+});
+
+check('she does not dance in focus mode, with no music, on stale or bad input, or when switched off (Phase 4)', () => {
+  const still = (frames) => rangeOf(frames, 'hips.py') < 0.006;
+  // focus mode: the same music, but the person is typing fast
+  const f = dancer({ world: { focus: true, keys: 300 } });
+  f.play(2);
+  const fr = f.play(8);
+  assert(f.w.api.dance().w < 0.01, `weight ${f.w.api.dance().w.toFixed(3)} in focus mode`);
+  assert(still(fr), 'she bounced in focus mode');
+  assert(f.w.api.dance().log.length === 0, 'she started a phrase in focus mode');
+  // control: not in focus mode she does dance
+  const c = dancer(); c.play(2); assert(!still(c.play(8)), 'the control never danced');
+  // she is dancing and focus mode begins: she settles smoothly
+  const s = dancer(); s.play(8);
+  s.w.api.setWorld(worldPayload({ focus: true, keys: 300 }));
+  const after = s.play(4);
+  assert(s.w.api.dance().w < 0.05, `still dancing 4 s after focus began (${s.w.api.dance().w.toFixed(2)})`);
+  assert(worstStep(after) <= MAX_PER_FRAME, 'stopping for focus snapped');
+  // no music, and music that says it is not playing
+  const n = dancer(); n.play(2, { send: false }); assert(still(n.play(6, { send: false })), 'danced with no music');
+  const p = dancer(); p.play(2, { playing: false }); assert(still(p.play(6, { playing: false })), 'danced to playing:false');
+  // music that stops being reported (Python died, the sound ended): she stops within 3 s
+  const st = dancer(); st.play(8);
+  const gone = st.play(6, { send: false });
+  assert(st.w.api.dance().w < 0.01, 'she keeps dancing to music that stopped');
+  assert(worstStep(gone) <= MAX_PER_FRAME, 'stopping snapped');
+  // garbage in: ignored, never throws
+  const g = dancer();
+  for (const bad of [null, undefined, 5, 'x', {}, { playing: true, bpm: 'fast', phase: 'x' }, { playing: true, bpm: 5000, phase: 0 }])
+    g.w.api.setMusic(bad);
+  assert(still(g.play(4, { send: false })), 'bad input made her dance');
+  // the switch
+  const off = dancer(); off.w.ctx.window.EVA_MUSIC_DANCE = false; off.play(2); assert(still(off.play(6)), 'danced while switched off');
+});
+
+Math.random = realRandom;
 console.log(failures ? `\n${failures} motion check(s) FAILED` : '\nall motion checks passed');
 process.exit(failures ? 1 : 0);

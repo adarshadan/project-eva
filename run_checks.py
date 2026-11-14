@@ -26,7 +26,7 @@ MODULES = ["config", "logger", "system_tools", "scheduler", "vision",
            "core/agent", "core/runtime", "core/speaker", "core/llm", "core/prompt", "core/results",
            "core/presence_impl", "core/gui", "core/toolset/desktop", "core/toolset/web_files_system",
            "core/toolset/presence",
-           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline", "world_sensor"]
+           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline", "world_sensor", "music"]
 
 failures = []
 
@@ -6665,6 +6665,153 @@ def the_world_sensor_sees_without_touching():
         assert forbidden not in src, f"world_sensor.py mentions {forbidden}: it must only read"
 
 
+def she_hears_music_not_speech_and_stays_off_without_the_library():
+    """Phase 4: the analyser finds the beat of a click track; silence, speech-like bursts, a steady tone and
+    notification dings are not music; a missing loopback library switches the feature off quietly."""
+    import numpy as np
+    import music
+    SR = 44100
+
+    def clicks(bpm, secs, offset=0.13, kick=False):
+        x = np.zeros(int(SR * secs), np.float32)
+        rng = np.random.default_rng(3)
+        per, t, times = 60.0 / bpm, offset, []
+        while t < secs - 0.2:
+            i = int(t * SR)
+            times.append(t)
+            if kick:       # a bass drum on the beat, a hat between
+                tk = np.arange(int(0.15 * SR)) / SR
+                x[i:i + len(tk)] += (0.8 * np.sin(2 * np.pi * 60 * tk) * np.exp(-tk * 25)).astype(np.float32)
+                j, n = i + int(per / 2 * SR), int(0.012 * SR)
+                x[j:j + n] += (0.2 * rng.standard_normal(n) * np.exp(-np.arange(n) / SR * 400)).astype(np.float32)
+            else:
+                tt = np.arange(int(0.012 * SR)) / SR
+                x[i:i + len(tt)] += (0.8 * np.sin(2 * np.pi * 1000 * tt) * np.exp(-tt * 300)).astype(np.float32)
+            t += per
+        return x, np.array(times)
+
+    def speech(secs, seed):
+        rng = np.random.default_rng(seed)
+        x, t = np.zeros(int(SR * secs), np.float32), 0.2
+        while t < secs - 0.5:
+            d = rng.uniform(0.08, 0.35)
+            n, i = int(d * SR), int(t * SR)
+            x[i:i + n] += (0.3 * rng.standard_normal(n) * np.hanning(n)).astype(np.float32)
+            t += d + rng.uniform(0.05, 1.2)
+        return x
+
+    def run(x, block=1024):
+        a, states = music.MusicAnalyzer(SR), []
+        for i in range(0, len(x), block):
+            a.feed(x[i:i + block])
+            states.append(a.state())
+        return states
+
+    # a click track: tempo within 3 BPM, the beat within 60 ms, recognised as music (also with bass drum + hat)
+    for bpm, kick in ((120, False), (120, True), (100, False), (140, False)):
+        x, times = clicks(bpm, 14, kick=kick)
+        st = run(x)
+        assert st[-1]["playing"], f"{bpm} BPM click track (kick={kick}) is not recognised as music: {st[-1]}"
+        for s in st[-400:]:
+            assert abs(s["bpm"] - bpm) <= 3, f"{bpm} BPM came out as {s['bpm']}"
+        worst = 0.0
+        for k in range(len(st) - 400, len(st), 23):
+            s, now = st[k], (k + 1) * 1024 / SR
+            last_beat = now - s["phase"] * 60.0 / s["bpm"]
+            worst = max(worst, float(np.min(np.abs(times - last_beat))))
+        assert worst < 0.060, f"{bpm} BPM (kick={kick}): beat phase off by {worst * 1000:.0f} ms"
+    st = run(clicks(120, 14)[0])
+    assert 0.0 <= min(s["phase"] for s in st) and max(s["phase"] for s in st) < 1.0
+    assert all(0.0 <= s[k] <= 1.0 for s in st for k in ("energy", "low", "high")), "levels leave 0..1"
+    # music that stops is noticed within a couple of seconds
+    x = np.concatenate([clicks(120, 12)[0], np.zeros(SR * 5, np.float32)])
+    st = run(x)
+    off = next(i for i, s in enumerate(st) if i * 1024 / SR > 12 and not s["playing"])
+    assert off * 1024 / SR - 12 < 3.0, "she would dance for seconds after the music stopped"
+    # not music: silence, speech-like bursts at irregular intervals, hiss, a steady tone, dings
+    assert not any(s["playing"] for s in run(np.zeros(SR * 12, np.float32))), "silence counted as music"
+    for seed in range(20):
+        assert not any(s["playing"] for s in run(speech(25, seed), 2048)), f"speech-like bursts (seed {seed}) counted as music"
+    rng = np.random.default_rng(1)
+    assert not any(s["playing"] for s in run((0.1 * rng.standard_normal(SR * 15)).astype(np.float32))), "hiss counted as music"
+    tone = (0.3 * np.sin(2 * np.pi * 440 * np.arange(SR * 20) / SR)).astype(np.float32)
+    assert not any(s["playing"] for s in run(tone)), "a steady tone counted as music"
+    dings = np.zeros(SR * 30, np.float32)
+    for t0 in (2, 9, 16, 23):
+        tt = np.arange(SR) / SR
+        dings[t0 * SR:t0 * SR + SR] += (0.4 * np.sin(2 * np.pi * 880 * tt) * np.exp(-tt * 5)).astype(np.float32)
+    assert not any(s["playing"] for s in run(dings)), "notification dings counted as music"
+    # a missing loopback library: the feature is off, nothing crashes, one line in the log
+    import config
+    saved = sys.modules.get("pyaudiowpatch", "absent")
+    sys.modules["pyaudiowpatch"] = None                    # makes `import pyaudiowpatch` raise ImportError
+    music._logged.discard("music-lib")
+    try:
+        lines = []
+        _warn = music.log.warning
+        music.log.warning = lambda m, *a, **k: lines.append(m)
+        try:
+            ln = music.MusicListener(music.WasapiLoopback)
+            assert ln.start() is False and ln.latest() is None, "the feature should be off without the library"
+            assert ln.start() is False
+            assert len(lines) == 1, f"the missing library was logged {len(lines)} times"
+        finally:
+            music.log.warning = _warn
+        try:
+            music.WasapiLoopback().open()
+            raise AssertionError("open() without the library should raise")
+        except ImportError:
+            pass
+    finally:
+        if saved == "absent":
+            sys.modules.pop("pyaudiowpatch", None)
+        else:
+            sys.modules["pyaudiowpatch"] = saved
+    # the switch in config.py turns the whole thing off, and it is on by default
+    assert config.EVA_MUSIC is True and config.EVA_MUSIC_DANCE is True
+    config.EVA_MUSIC = False
+    try:
+        assert music.MusicListener(lambda: None).start() is False
+    finally:
+        config.EVA_MUSIC = True
+    # the listener runs on its own thread (never the GUI thread), reads a fake backend, and stops cleanly
+    class FakeLoopback:
+        sr = SR
+        def __init__(self):
+            self.blocks = iter([clicks(120, 16)[0][i:i + 1024] for i in range(0, SR * 16, 1024)])
+            self.closed = False
+        @classmethod
+        def available(cls):
+            return True
+        def open(self):
+            pass
+        def read(self, timeout=0.1):
+            return next(self.blocks, None)
+        def close(self):
+            self.closed = True
+    made = []
+    def factory():
+        made.append(FakeLoopback())
+        return made[-1]
+    factory.available = lambda: True
+    ln = music.MusicListener(factory)
+    assert ln.start() is True
+    end = time.time() + 20
+    while time.time() < end and not (ln.latest() or {}).get("playing"):
+        time.sleep(0.05)
+    st = ln.latest()
+    assert st and st["playing"] and abs(st["bpm"] - 120) <= 3, f"the listener thread never heard the beat: {st}"
+    assert ln.thread_ident is not None and ln.thread_ident != __import__("threading").get_ident(), \
+        "the analysis must run off the calling (GUI) thread"
+    ln.stop()
+    assert made[0].closed, "the capture device was not released"
+    # privacy: nothing in music.py writes audio out or sends it anywhere
+    msrc = _source("music")
+    for banned in ("import wave", "soundfile", "requests", "urllib", "socket", "http", "tofile", "np.save", ".write(", "pickle"):
+        assert banned not in msrc, f"music.py contains {banned!r}"
+    assert "pyaudiowpatch" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements.txt")).read().lower()
+
+
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",
                    animation_follows_the_task),
                   ("the agent drives the activity pose: thinking -> per tool -> idle",
@@ -6757,7 +6904,9 @@ for label, fn in [("the animation pose follows the task (tool and skill both map
                    fixes_from_the_1001_log),
                   ("next level: hearing, second provider, fast reader, coding helper, being shown",
                    next_level_hearing_reader_coder_watch),
-                   ("the world sensor sees without touching windows", the_world_sensor_sees_without_touching)]:
+                   ("the world sensor sees without touching windows", the_world_sensor_sees_without_touching),
+                   ("she hears music, not speech, and stays off without the loopback library",
+                    she_hears_music_not_speech_and_stays_off_without_the_library)]:
     check(label, fn)
 
 print()
