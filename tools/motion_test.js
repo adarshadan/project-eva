@@ -490,7 +490,7 @@ check('she keeps clear: no move ends or passes within 150 px of the cursor or th
   }
   // direct: a cursor close on her right makes every lean (and no peek) go to her left
   const t = world(); t.api.drives.hourOverride = 14;
-  simulate(t, 400, () => ({ cursor: [1100, 900], idle: 30, window: { rect: [100, 100, 700, 700], kind: 'editor', title: 'x' } }));
+  simulate(t, 900, () => ({ cursor: [1100, 900], idle: 30, window: { rect: [100, 100, 700, 700], kind: 'editor', title: 'x' } }));
   const leans = t.api.presence.behLog.filter((m) => m.name === 'lean');
   assert(leans.length >= 2, 'no leans to judge');
   for (const l of leans) assert(l.pr.side === -1, 'she leaned toward the cursor');

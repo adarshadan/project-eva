@@ -800,10 +800,10 @@ const PERSONALITY = {
           socialDown: 0.25, focusIn: 0.8, focusOut: 0.07, awayAfter: 120 },
   temperature: 0.35,           // softmax noise: higher = more adventurous picks
   repeatPenalty: 0.2,          // score factor when the same thing would come twice in a row
-  gap: [2, 6],                 // seconds between one pick and the next
+  gap: [4, 10],                // seconds between one pick and the next (manager: 2-6 s was too busy)
   novelty: 400,                // a behaviour triple seen in the last N picks is not picked again
   weight: { wander: 1.0, sit: 0.9, lean: 0.8, peek: 0.9, stretch: 0.8, yawn: 0.9, look_around: 1.0,
-            hum_sway: 0.9, check_in: 0.8, wave_return: 1.0, corner_settle: 1.0, stay_still: 0.8 },
+            hum_sway: 0.9, check_in: 0.8, wave_return: 1.0, corner_settle: 1.0, stay_still: 1.1 },
 };
 const drives = { energy: 0.65, curiosity: 0.35, boredom: 0.15, social: 0.2, focusRespect: 0,
                  hourOverride: null, _hour: 12, _hourAt: -1e9, prevIdle: 0, seenNew: 0,
@@ -855,7 +855,10 @@ function driveStep(P, now, dt) {
   const sTarget = clamp01(since / 600) * (0.4 + 0.6 * T_.friendly);
   D.social = ease(D.social, sTarget, sTarget < D.social ? R.socialDown : R.socialEase);
   if (w) {                                                        // the person comes back after being away
-    if (D.prevIdle >= R.awayAfter && w.idle < 2) { D.returnedAt = now; D.waved = false; D.social += 0.4; }
+    if (D.prevIdle >= R.awayAfter && w.idle < 2) {
+      D.returnedAt = now; D.waved = false; D.social += 0.4;
+      if (P.nextPick !== null) P.nextPick = Math.min(P.nextPick, now + 0.8);   // greet promptly, not at the next slot
+    }
     D.prevIdle = w.idle;
   }
   // focus-respect: rises quickly when the person concentrates, lets go slowly
@@ -1070,6 +1073,9 @@ function utilityStep(P, now, dt, idleLike) {
     cands.push({ name, pr, s, seen: last2 !== '' && P.tripleLog.indexOf(last2 + '>' + last + '>' + name) >= 0 });
   }
   if (!cands.length) { P.nextPick = now + 1; return; }
+  // a greeting is not a whim: when the person has just come back she waves, whatever the dice or novelty say
+  const greet = cands.find((x) => x.name === 'wave_return');
+  if (greet && !D.waved && now - D.returnedAt < 15) { startBehaviour(P, greet.name, greet.pr, now); return; }
   const fresh = cands.filter((x) => !x.seen);           // no behaviour triple repeats while another is possible
   const pool = fresh.length ? fresh : cands;
   const T_ = PERSONALITY.temperature;

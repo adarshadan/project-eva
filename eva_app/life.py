@@ -323,9 +323,17 @@ def install(ctx):
             return p.x(), p.y()
 
         def work_rect(self):
+            """The active window's working area. A maximised window is nearly the whole screen: keeping clear of
+            all of it would pin her in place all day, so then only the cursor (checked separately) counts."""
             w = (latest["world"] or {}).get("window") or {}
             r = w.get("rect")
-            return tuple(r) if r else None
+            if not r:
+                return None
+            g = QApplication.primaryScreen().geometry()
+            area = max(1, g.width() * g.height())
+            if (r[2] - r[0]) * (r[3] - r[1]) >= 0.85 * area:
+                return None
+            return tuple(r)
 
         def eva_rect(self):
             g = avatar.geometry()
