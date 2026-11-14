@@ -776,6 +776,22 @@ class AvatarWidget(QWidget):
         self._boredom_sent = level
         self.view.page().runJavaScript(f"if (window.setBoredom) setBoredom({level});")
 
+    def set_world(self, world: dict):
+        """A compact sample of the person's world (Phase 1), ~8 times a second.
+        Pure scenery: the page scores it for gaze; nothing here acts on a window."""
+        import json
+        w = world
+        try:
+            win = w.get("window") if isinstance(w, dict) else None
+            if isinstance(win, dict) and isinstance(win.get("title"), str) and len(win["title"]) > 80:
+                w = dict(w)
+                w["window"] = dict(win)
+                w["window"]["title"] = win["title"][:80]
+        except Exception:
+            w = world
+        self.view.page().runJavaScript(
+            "if (window.setWorld) setWorld(" + json.dumps(w) + ");")
+
     def acknowledge(self):
         """The person spoke to her: a small nod and a smile."""
         self.view.page().runJavaScript("if (window.acknowledge) acknowledge();")
@@ -818,6 +834,10 @@ class AvatarWidget(QWidget):
         speed = float(getattr(config, "ANIMATION_SPEED", 1.0) or 1.0)
         self.view.page().runJavaScript(f"window.EVA_LIFE = {life}; window.EVA_TUNE = {tune}; "
                                        f"window.EVA_SPEED = {max(0.5, min(1.6, speed)):.3f};")
+        attention = "true" if getattr(config, "EVA_ATTENTION", True) else "false"
+        focus_mode = "true" if getattr(config, "EVA_FOCUS_MODE", True) else "false"
+        self.view.page().runJavaScript(
+            f"window.EVA_ATTENTION = {attention}; window.EVA_FOCUS_MODE = {focus_mode};")
         self._speaking_sent = None            # a reloaded page has forgotten it
         self._activity_sent = None
         if hasattr(self, "_body"):

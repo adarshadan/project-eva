@@ -87,6 +87,11 @@ def safe_folder(folder: str):
         return None, "a whole drive is not a project folder"
     if low == home.lower().rstrip("\\/"):
         return None, "the home folder itself is not a project folder -- name a folder inside it"
+    # Windows keeps its scratch folder inside AppData; writing there touches nothing of the person's, so it
+    # is allowed before the AppData ban below (a job in %TEMP% cannot reach settings anyway)
+    temp = os.path.normpath(os.environ.get("TEMP") or os.environ.get("TMP") or "/tmp").lower().rstrip("\\/")
+    if temp and (low == temp or low.startswith(temp + os.sep)):
+        return p, ""
     banned = [os.environ.get("SYSTEMROOT", r"C:\Windows"), os.environ.get("PROGRAMFILES", r"C:\Program Files"),
               os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
               os.environ.get("PROGRAMDATA", r"C:\ProgramData"), os.path.join(home, "AppData"),

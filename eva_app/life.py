@@ -121,6 +121,84 @@ def install(ctx):
                 spots.append((w["handle"], r["top"], r["left"], r["right"]))
             return spots
 
+    class WorldProbes:
+        """Read-only probes for world_sensor.WorldSensor (Phase 1). Nothing here
+        focuses, clicks, types into or moves a window -- the world is scenery."""
+
+        def __init__(self):
+            self._own = {}
+
+        def cursor(self):
+            p = _QCursor.pos()
+            return p.x(), p.y()
+
+        @staticmethod
+        def _dpr():
+            try:
+                return float(QApplication.primaryScreen().devicePixelRatio() or 1.0)
+            except Exception:
+                return 1.0
+
+        def _logical(self, l, t, r, b):
+            """Win32 gives physical pixels; the cursor and her own geometry are Qt (logical) pixels.
+            Mixing them at 125 % scaling made every maximised window look full-screen (manager review)."""
+            k = self._dpr()
+            return int(l / k), int(t / k), int(r / k), int(b / k)
+
+        def screen(self):
+            g = QApplication.primaryScreen().geometry()      # the whole monitor, taskbar included
+            return g.width(), g.height()
+
+        def eva_rect(self):
+            g = avatar.geometry()
+            return g.left(), g.top(), g.right(), g.bottom()
+
+        def idle_seconds(self):
+            return idle_behavior.get_idle_seconds()["idle_seconds"]
+
+        def typing_rate(self):
+            return idle_behavior.get_typing_rate()
+
+        def foreground(self):
+            fg = dc.get_foreground_app()
+            title = fg.get("title") or ""
+            rect = None
+            handle = fg.get("handle")
+            if handle:
+                try:
+                    import ctypes
+                    from ctypes import wintypes
+                    u = ctypes.windll.user32
+                    r = wintypes.RECT()
+                    if u.GetWindowRect(ctypes.c_void_p(int(handle)), ctypes.byref(r)):
+                        rect = self._logical(r.left, r.top, r.right, r.bottom)
+                except Exception:
+                    rect = None
+            return {"title": title, "rect": rect}
+
+        def windows(self):
+            import pygetwindow as gw
+            out = []
+            try:
+                windows = gw.getAllWindows()
+            except Exception:
+                return out
+            for w in windows:
+                try:
+                    title = (w.title or "").strip()
+                    if not title:
+                        continue
+                    hwnd = int(w._hWnd)
+                    if hwnd not in self._own:
+                        self._own[hwnd] = bool(dc.is_own_window(hwnd))
+                    if self._own[hwnd]:
+                        continue
+                    out.append((hwnd, title, self._logical(int(w.left), int(w.top), int(w.left) + int(w.width),
+                                                           int(w.top) + int(w.height))))
+                except Exception:
+                    continue
+            return out
+
     # ---- boredom: how long nobody has needed her ----------------------------------------------
     def boredom_level():
         if agent.busy or runtime.queued():
@@ -197,6 +275,27 @@ def install(ctx):
     glance_timer.timeout.connect(attention_tick)
     glance_timer.start(120)
     app._eva_glance_timer = glance_timer
+
+    # ---- the world she lives in (Phase 1): a compact sample ~8 times a second -----------------
+    # QTimer, not a thread: QCursor.pos, widget geometry and runJavaScript must
+    # all run on the GUI thread. Everything here is a read; the page only turns
+    # her head toward what it sees.
+    import world_sensor
+
+    sensor = world_sensor.WorldSensor(WorldProbes())
+
+    def world_tick():
+        if not config.EVA_WORLD:
+            return
+        try:
+            avatar.set_world(sensor.sample())
+        except Exception:
+            log.exception("world sample failed")
+
+    world_timer = QTimer()
+    world_timer.timeout.connect(world_tick)
+    world_timer.start(int(1000 / max(1, config.EVA_WORLD_HZ)))
+    app._eva_world_timer = world_timer
 
     # Predictive help (predictive.py): offers what the person usually opens at this
     # time. Off unless switched on (tray > Settings > Initiative); never money.
@@ -275,4 +374,4 @@ def install(ctx):
     commentary_timer.timeout.connect(commentary_tick)
     commentary_timer.start(5000)
 
-    ctx.timers += [idle_timer, glance_timer, suggestion_timer, commentary_timer]
+    ctx.timers += [idle_timer, glance_timer, world_timer, suggestion_timer, commentary_timer]

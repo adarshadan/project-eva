@@ -36,6 +36,7 @@ function world() {
     this.api = { pc: poseController, ACT: ACTIVITIES, PROC, rest: restPose, play: playProcedural,
                  setActivity: window.setActivity, writePose, gesture: () => procGesture,
                  walkW: () => walkW, life, presenceStep, setAffect: window.setAffect, emote: window.emote,
+                 setWorld: window.setWorld, presence, acknowledge: window.acknowledge,
                  affect: () => affect };`, ctx);
   const api = ctx.api;
   let t = 0;
@@ -46,6 +47,28 @@ function world() {
     return f;
   };
   return { ctx, api, bones, frame, now: () => clock };
+}
+// A believable world sample; each check overrides only what it needs.
+function worldPayload(over) {
+  return Object.assign({
+    t: 1, cursor: [40, 40], speed: 0,
+    window: { rect: [100, 100, 900, 700], kind: 'editor', title: 'notes.txt - Notepad' },
+    keys: 0, idle: 0, full: false, new: null,
+    screen: [1920, 1080], eva: [850, 700, 1000, 1080], focus: false,
+  }, over || {});
+}
+// Advances performance.now like the feeling checks do, then runs presenceStep and writes the pose.
+function stepper(w) {
+  let t = 0;
+  const step = (dt = 1 / 30) => {
+    t += dt;
+    const now = w.now() + t;
+    w.ctx.performance.now = () => now * 1000;
+    const f = w.api.pc.step(t, dt);
+    w.api.writePose(w.api.presenceStep(f, t, dt, true), now);
+    return f;
+  };
+  return { step, now: () => w.now() + t };
 }
 // Every channel the controller owns, read back from the bones.
 function snapshot(b) {
@@ -237,6 +260,75 @@ check('she talks with her body: beats while speaking, bounded, varied, and still
   const arms = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => /lowerArm/i.test(k)));
   const after = maxStep(arms(quiet), arms(snapshot(w.bones)));
   assert(after < 0.05, `she keeps gesturing after she stopped talking: ${after.toFixed(3)} rad`);
+});
+
+check('a new window is looked at within 300 ms, and the eyes never snap (Phase 1)', () => {
+  const w = world();
+  const run = stepper(w);
+  for (let i = 0; i < 30; i++) run.step();                     // settle
+  w.api.setWorld(worldPayload({ new: { rect: [10, 200, 300, 400], at: 1, kind: 'window' } }));
+  let prev = snapshot(w.bones), worst = 0, aimedInTime = false;
+  for (let i = 0; i < 9; i++) {
+    run.step();
+    if (i < 2 && w.api.presence.aim && w.api.presence.aim.kind === 'new') aimedInTime = true;
+    const s = snapshot(w.bones);
+    worst = Math.max(worst, maxStep(prev, s)); prev = s;
+  }
+  assert(aimedInTime, 'aim.kind was not "new" within two frames');
+  const aim = w.api.presence.aim;
+  assert(aim && Math.abs(w.api.presence.eyeYaw) > 0.7 * Math.abs(aim.yaw),
+    `eyes not on the new window (eyeYaw=${w.api.presence.eyeYaw.toFixed(1)}, aim=${aim && aim.yaw.toFixed(1)})`);
+  assert(worst <= MAX_PER_FRAME, `looking at a new window snapped ${worst.toFixed(3)} rad in one frame`);
+});
+
+check('she looks at the person when spoken to, and a stale target decays away (Phase 1)', () => {
+  const w = world();
+  const run = stepper(w);
+  w.api.setWorld(worldPayload());
+  for (let i = 0; i < 5; i++) run.step();
+  w.api.acknowledge();
+  for (let i = 0; i < 10; i++) run.step();
+  const aim = w.api.presence.aim;
+  assert(aim && aim.kind === 'person', `acknowledge did not turn her to the person (${aim && aim.kind})`);
+  assert(Math.abs(w.api.presence.eyeYaw) < 6, `eyes not on the person (${w.api.presence.eyeYaw.toFixed(1)})`);
+  // a new window is looked at, then nothing new happens for four seconds
+  w.api.setWorld(worldPayload({ new: { rect: [10, 200, 300, 400], at: 2, kind: 'window' } }));
+  for (let i = 0; i < 120; i++) run.step();
+  const stale = w.api.presence.aim;
+  assert(stale && stale.salience < 0.15, `stale target still salient (${stale && stale.salience.toFixed(2)})`);
+  assert(stale.kind !== 'new', 'she still stares at the window that appeared four seconds ago');
+});
+
+check('focus mode keeps her still: at most one glance in ten seconds (Phase 1)', () => {
+  const range = (values) => Math.max(...values) - Math.min(...values);
+  const w = world();
+  const run = stepper(w);
+  w.api.setWorld(worldPayload({ focus: true, keys: 300 }));
+  const head = [], torso = [], deg = Math.PI / 180;
+  for (let i = 0; i < 300; i++) {
+    run.step();
+    head.push(w.api.presence.headYaw * deg);
+    torso.push(w.api.presence.torsoYaw * deg);
+  }
+  assert(range(head) < 0.05, `head moved ${range(head).toFixed(3)} rad in focus mode`);
+  assert(range(torso) < 0.05, `torso moved ${range(torso).toFixed(3)} rad in focus mode`);
+  assert(w.api.presence.glanceCount <= 1, `${w.api.presence.glanceCount} glances in ten seconds of focus`);
+  // control: the same world without focus moves her head more
+  const cw = world();
+  const crun = stepper(cw);
+  cw.api.setWorld(worldPayload({ new: { rect: [10, 200, 300, 400], at: 1, kind: 'window' } }));
+  const control = [];
+  for (let i = 0; i < 300; i++) { crun.step(); control.push(cw.api.presence.headYaw * deg); }
+  assert(range(control) > range(head) + 0.05, 'the non-focus control did not move more');
+  // and a bored, non-focused world still fidgets
+  const bw = world();
+  const brun = stepper(bw);
+  bw.api.setWorld(worldPayload());
+  bw.api.presence.boredom = 3;
+  bw.api.presence.nextFidget = 0;
+  let fidgeted = false;
+  for (let i = 0; i < 120; i++) { brun.step(); if (bw.api.presence.fidget) fidgeted = true; }
+  assert(fidgeted, 'bored but not focused: she never fidgets');
 });
 
 console.log(failures ? `\n${failures} motion check(s) FAILED` : '\nall motion checks passed');

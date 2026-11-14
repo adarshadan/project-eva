@@ -4,6 +4,7 @@ Idle animation never touches real windows/clicks/keys/network — visual only.
 Suggestions are always phrased as offers, rate-limited, and suppressed during
 calls, fullscreen apps, or right after real input.
 """
+import collections
 import random
 import time
 from pynput import mouse, keyboard
@@ -14,11 +15,29 @@ import config
 import desktop_control as dc
 
 _last_input_ts = time.time()
+# When each of the last 60 keys was pressed (Phase 1 typing rate). A deque, so
+# appending a key is O(1) and the rate scan is bounded by 60 entries.
+_key_ts = collections.deque(maxlen=60)
 
 
 def _touch_input(*_):
     global _last_input_ts
     _last_input_ts = time.time()
+
+
+def _on_key(*_):
+    _touch_input()
+    _key_ts.append(time.time())
+
+
+def get_typing_rate(now=None, window=3.0) -> float:
+    """Keys per minute over the last `window` seconds (0.0 when none).
+    O(60): the deque never holds more than 60 timestamps."""
+    if window <= 0:
+        return 0.0
+    now = time.time() if now is None else now
+    n = sum(1 for ts in _key_ts if now - ts <= window)
+    return n * 60.0 / window
 
 
 def touch_input():
@@ -32,7 +51,7 @@ def touch_input():
 
 def start_input_listeners():
     mouse.Listener(on_click=_touch_input, on_move=_touch_input, on_scroll=_touch_input).start()
-    keyboard.Listener(on_press=_touch_input).start()
+    keyboard.Listener(on_press=_on_key).start()
 
 
 def get_idle_seconds():

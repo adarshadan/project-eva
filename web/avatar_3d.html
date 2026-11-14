@@ -616,6 +616,10 @@ const presence = {
   shift: 0, shiftTarget: 0, nextShift: 6,
   boredom: 0, fidget: null, nextFidget: 12,
   running: false, externalExpr: false,
+  // Phase 1 attention: what she is looking at, and the slower torso that follows
+  spokenAt: -1e9, aim: null, cand: {}, newAt: null, newRect: null,
+  curious: null, focus: false, nextFocusGlance: 0, glanceCount: 0,
+  torsoYaw: 0, torsoPitch: 0,
 };
 window.setAttention = function (dx, dy, moving, hover) {
   // dx, dy: where the cursor is from her head, -1..1 (right / down positive, screen space)
@@ -625,8 +629,152 @@ window.setAttention = function (dx, dy, moving, hover) {
                     at: moving || hover ? now : (prev ? prev.at : 0), hover: !!hover };
 };
 window.setBoredom = function (level) { presence.boredom = Math.max(0, Math.min(3, level | 0)); };
-window.acknowledge = function () { presence.nod = { start: performance.now() / 1000 }; presence.smile = Math.max(presence.smile, 0.55); };
+window.acknowledge = function () { presence.spokenAt = performance.now() / 1000; presence.nod = { start: performance.now() / 1000 }; presence.smile = Math.max(presence.smile, 0.55); };
 window.setRunning = function (on) { presence.running = !!on; };
+
+// ---------------------------------------------------------------------------
+// The world and attention (Phase 1). Python sends a compact world sample ~8x a
+// second (setWorld); the page scores five candidates with salience that decays
+// -- the moving cursor, a new window, the caret while typing, the person (the
+// camera) when spoken to or idle, and a curious spot when bored -- then picks
+// one with hysteresis. Eyes follow first, then the head, then the torso.
+// All of it is gaze only: she never touches a window.
+// ---------------------------------------------------------------------------
+let world = null;
+window.setWorld = function (w) {
+  try {
+    if (!w || !Array.isArray(w.cursor) || !Array.isArray(w.eva)) return;
+    const receipt = performance.now() / 1000;
+    const prev = world;
+    const copy = {};
+    for (const k in w) copy[k] = w[k];
+    copy.receivedAt = receipt;
+    const at = (w.new && typeof w.new.at === 'number') ? w.new.at : null;
+    copy.newAt = at;
+    copy.newSeenAt = (at !== null && (!prev || prev.newAt !== at)) ? receipt : (prev ? prev.newSeenAt : 0);
+    if (w.new && Array.isArray(w.new.rect)) copy.newRect = w.new.rect;
+    else copy.newRect = prev ? prev.newRect : null;
+    world = copy;
+  } catch (e) { /* malformed input: leave the last good world alone */ }
+};
+
+function aimPoint(P, tx, ty) {
+  const w = world;
+  if (!w) return { yaw: 0, pitch: 0 };
+  const eva = Array.isArray(w.eva) ? w.eva : [0, 0, 0, 0];
+  const screen = (Array.isArray(w.screen) && w.screen.length >= 2) ? w.screen : [1920, 1080];
+  const headX = (eva[0] + eva[2]) / 2;
+  const headY = eva[1] + (eva[3] - eva[1]) * 0.15;
+  const halfW = Math.max(1, screen[0] / 2), halfH = Math.max(1, screen[1] / 2);
+  const dx = (tx - headX) / halfW, dy = (ty - headY) / halfH;
+  return { yaw: Math.max(-40, Math.min(40, dx * 32)),
+           pitch: Math.max(-25, Math.min(25, -dy * 20)) };
+}
+
+const AIM_DECAY = { cursor: 1 / 1.2, new: 1 / 0.8, caret: 1.0, person: 2.0, curious: 3.0 };
+
+function pickAim(P, best, now, dt) {
+  const old = P.aim;
+  if (!old) {
+    if (best) P.aim = { kind: best.kind, yaw: best.yaw, pitch: best.pitch, salience: best.salience, since: now };
+    return;
+  }
+  if (best && best.kind === old.kind) {          // still the same target: track it, no switch
+    old.yaw = best.yaw; old.pitch = best.pitch; old.salience = best.salience;
+    return;
+  }
+  const age = now - old.since;
+  const weak = old.salience < 0.15;
+  const better = !!best && best.salience > old.salience * 1.15 + 0.05;
+  if (best && (better || weak) && age > 0.25) {
+    P.aim = { kind: best.kind, yaw: best.yaw, pitch: best.pitch, salience: best.salience, since: now };
+    return;
+  }
+  old.salience = Math.max(0, old.salience - (AIM_DECAY[old.kind] || 1) * dt);
+  if (old.salience < 0.15 && age > 0.25 && (!best || !better)) {
+    // Nothing better is left: rest the gaze ahead instead of staring at a stale spot.
+    P.aim = { kind: 'rest', yaw: 0, pitch: 0, salience: 0, since: now };
+  }
+}
+
+function attentionStep(P, now, dt) {
+  if (!world || window.EVA_ATTENTION === false) return;
+  const w = world;
+  const focus = !!(w.focus && window.EVA_FOCUS_MODE !== false);
+  if (focus && !P.focus) { P.focus = true; P.nextFocusGlance = now + 10 + Math.random() * 8; }
+  P.focus = focus;
+  P.cand = P.cand || {};
+  for (const k in AIM_DECAY) P.cand[k] = Math.max(0, (P.cand[k] || 0) - AIM_DECAY[k] * dt);
+
+  if (focus) {
+    // Drop cursor/caret/new/curious. Only the person stays, at a low level, and
+    // a small glance is allowed once in a while. No weight shifts or fidgets.
+    P.cand.cursor = P.cand.new = P.cand.caret = P.cand.curious = 0;
+    P.shiftTarget = 0; P.fidget = null;
+    if (P.aim && ['cursor', 'caret', 'new', 'curious'].indexOf(P.aim.kind) >= 0) {
+      P.aim = { kind: 'rest', yaw: 0, pitch: 0, salience: 0, since: now };
+    }
+    const personNow = (now - P.spokenAt < 3) || (w.idle > 20);
+    P.cand.person = personNow ? 0.35 : 0;
+    let best = personNow ? { kind: 'person', yaw: 0, pitch: 0, salience: 0.35 } : null;
+    if (now > P.nextFocusGlance) {
+      P.nextFocusGlance = now + 10 + Math.random() * 8;
+      P.glanceCount++;
+      best = { kind: 'glance', yaw: Math.random() * 16 - 8, pitch: Math.random() * 8 - 4, salience: 0.36 };
+    }
+    pickAim(P, best, now, dt);
+    return;
+  }
+
+  // cursor: only while it is actually moving (and has just been seen)
+  const age = now - (w.receivedAt || 0);
+  if (Array.isArray(w.cursor) && w.speed > 40 && age < 0.4) {
+    P.cand.cursor = Math.max(P.cand.cursor, Math.min(1, 0.45 + w.speed / 1200));
+  }
+  // a new window or notification: full salience once per event, then it decays
+  if (w.new && typeof w.new.at === 'number') {
+    if (P.newAt !== w.new.at) { P.newAt = w.new.at; P.cand.new = 1; }
+    if (Array.isArray(w.new.rect)) P.newRect = w.new.rect;
+  }
+  // the caret in the foreground window, while typing
+  if (w.keys >= 20 && w.window && Array.isArray(w.window.rect)) {
+    P.cand.caret = Math.max(P.cand.caret, 0.55 + Math.min(0.2, w.keys / 600));
+  }
+  // the person (the camera): spoken to, or idle for a while
+  if (now - P.spokenAt < 3 || w.idle > 20) {
+    P.cand.person = Math.max(P.cand.person, 0.5);
+  }
+  // curiosity: only when bored and nothing else is worth looking at
+  const other = Math.max(P.cand.cursor, P.cand.new, P.cand.caret, P.cand.person);
+  if (P.boredom >= 1 && other <= 0.2) {
+    const screen = (Array.isArray(w.screen) && w.screen.length >= 2) ? w.screen : [1920, 1080];
+    if (!P.curious) P.curious = { x: 0, y: 0, next: 0 };
+    if (now > P.curious.next) {
+      P.curious.x = Math.random() * screen[0];
+      P.curious.y = Math.random() * screen[1] * 0.85;
+      P.curious.next = now + 2 + Math.random() * 2;
+    }
+    P.cand.curious = Math.max(P.cand.curious, 0.28 + 0.07 * P.boredom);
+  }
+
+  let best = null;
+  const consider = (kind, salience, tx, ty) => {
+    if (salience <= 0) return;
+    const a = (kind === 'person') ? { yaw: 0, pitch: 0 } : aimPoint(P, tx, ty);
+    if (!best || salience > best.salience) best = { kind, yaw: a.yaw, pitch: a.pitch, salience };
+  };
+  if (P.cand.cursor > 0 && Array.isArray(w.cursor))
+    consider('cursor', P.cand.cursor, w.cursor[0], w.cursor[1]);
+  if (P.cand.new > 0 && Array.isArray(P.newRect))
+    consider('new', P.cand.new, (P.newRect[0] + P.newRect[2]) / 2, (P.newRect[1] + P.newRect[3]) / 2);
+  if (P.cand.caret > 0 && w.window && Array.isArray(w.window.rect)) {
+    const r = w.window.rect;
+    consider('caret', P.cand.caret, (r[0] + r[2]) / 2, r[1] + (r[3] - r[1]) * 2 / 3);
+  }
+  if (P.cand.person > 0) consider('person', P.cand.person, null, null);
+  if (P.cand.curious > 0 && P.curious) consider('curious', P.cand.curious, P.curious.x, P.curious.y);
+  pickAim(P, best, now, dt);
+}
 const _origSetExpression = window.setExpression;
 window.setExpression = function (name, weight) {
   presence.externalExpr = !!(name && weight > 0);
@@ -768,15 +916,26 @@ function presenceStep(frame, t, dt, idleLike) {
   try {
     const o = frame.o, now = performance.now() / 1000, P = presence;
     try { affectStep(o, frame, t, dt, idleLike, now); } catch (e) { /* a feeling never breaks the frame */ }
+    attentionStep(P, now, dt);
     // -- what the eyes want ----------------------------------------------------------
-    let wantYaw = 0, wantPitch = 0, headShare = 0;
+    let wantYaw = 0, wantPitch = 0, headShare = 0, torsoShare = 0;
     const a = P.attn;
     const attending = a && (a.hover || now - a.at < 2.2);
-    if (attending) {
+    const aim = P.aim;
+    const cursorSal = (P.cand && P.cand.cursor) || 0;
+    if (attending && !P.focus &&
+        (a.hover || !aim || cursorSal > aim.salience * 1.15 + 0.05 || a.at > aim.since)) {
+      // the cursor keeps precedence while it is hovering or more salient than the aim
       wantYaw = a.dx * 32; wantPitch = -a.dy * 20; headShare = a.hover ? 0.45 : 0.35;
-    } else if (P.glance && now < P.glance.until) {
+    } else if (aim) {
+      wantYaw = aim.yaw; wantPitch = aim.pitch;
+      headShare = aim.kind === 'cursor' ? 0.35
+                : aim.kind === 'curious' ? 0.25
+                : (aim.kind === 'person' || aim.kind === 'caret' || aim.kind === 'new' || aim.kind === 'glance') ? 0.5
+                : 0;
+    } else if (!P.focus && P.glance && now < P.glance.until) {
       wantYaw = P.glance.yaw; wantPitch = P.glance.pitch; headShare = 0.25;
-    } else {
+    } else if (!P.focus) {
       if (P.glance) P.glance = null;
       if (now > P.nextGlance) {          // a glance away now and then -- people do not stare
         const side = Math.random() < 0.5 ? -1 : 1;
@@ -784,6 +943,11 @@ function presenceStep(frame, t, dt, idleLike) {
         P.nextGlance = now + (9 + Math.random() * 14) * (1.4 - 0.8 * affect.e);   // livelier when she has energy
       }
     }
+    if (P.focus) { headShare = 0.12; torsoShare = 0.03; }
+    else { torsoShare = headShare * 0.35; }
+    const tk = Math.min(1, dt * 1.1);   // the torso follows last and slowest
+    P.torsoYaw += (wantYaw * torsoShare - P.torsoYaw) * tk;
+    P.torsoPitch += (wantPitch * torsoShare - P.torsoPitch) * tk;
     if (now > P.nextSac) {               // micro-saccades: the eyes never sit perfectly still
       P.sacYaw = (Math.random() - 0.5) * 5; P.sacPitch = (Math.random() - 0.5) * 3;
       P.nextSac = now + 0.35 + Math.random() * 2.0;
@@ -800,6 +964,8 @@ function presenceStep(frame, t, dt, idleLike) {
     o.headY += T('GAZE_YAW_SIGN', 1) * P.headYaw * deg;
     o.headX += -T('GAZE_PITCH_SIGN', 1) * P.headPitch * deg;
     o.headZ += P.tilt;
+    o.spineY += 0.25 * P.torsoYaw * deg;
+    o.spineZ += 0.15 * P.torsoPitch * deg;
 
     // -- smile: soft when looked at or hovered, a pulse when spoken to ------------------
     const smileWant = (attending ? (a.hover ? 0.45 : 0.12) : 0.06) + 0.3 * Math.max(0, affect.v);
@@ -813,7 +979,7 @@ function presenceStep(frame, t, dt, idleLike) {
 
     // -- the body: weight shifts and fidgets, only when she is just standing -----------------
     frame.hipShift = 0; frame.footTap = 0;
-    if (idleLike) {
+    if (idleLike && !P.focus) {
       if (now > P.nextShift) {
         P.shiftTarget = P.shiftTarget > 0 ? -1 : 1;
         if (Math.random() < 0.25) P.shiftTarget = 0;
@@ -830,7 +996,7 @@ function presenceStep(frame, t, dt, idleLike) {
         P.nextFidget = now + (P.boredom === 1 ? 14 : P.boredom === 2 ? 8 : 5) + Math.random() * 10;
       }
     }
-    if (P.fidget) {
+    if (P.fidget && !P.focus) {
       const g = P.fidget, def = FIDGETS[g.name], p = (now - g.start) / g.dur;
       if (p >= 1 || !idleLike) P.fidget = null;
       else {

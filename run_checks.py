@@ -26,7 +26,7 @@ MODULES = ["config", "logger", "system_tools", "scheduler", "vision",
            "core/agent", "core/runtime", "core/speaker", "core/llm", "core/prompt", "core/results",
            "core/presence_impl", "core/gui", "core/toolset/desktop", "core/toolset/web_files_system",
            "core/toolset/presence",
-           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline"]
+           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline", "world_sensor"]
 
 failures = []
 
@@ -6351,6 +6351,7 @@ def next_level_hearing_reader_coder_watch():
     """2026-11-10: learnt voice level, unfinished phrases joined, wrong-script retry, Groq fallback, the fast
     reader, the coding helper, and being shown a task."""
     import array, math, tempfile, types as _t
+    import atexit, shutil
     import config
     import voice, stt_nvidia, stt_groq, coder, watch
     from core import prompt, reader, runtime as rt, registry, toolbox
@@ -6379,6 +6380,11 @@ def next_level_hearing_reader_coder_watch():
     got = run(ep, tone(1, 2), tone(1.5, 9000), tone(2.5, 2))
     assert len(got) == 1 and ep.meta["level"] > 3000, ep.meta
     d = tempfile.mkdtemp()
+    if coder.safe_folder(d)[0] is None:
+        # Windows keeps TEMP under %LOCALAPPDATA%, and coder rightly refuses settings folders as
+        # project folders. Keep this check's scratch somewhere it accepts; remove it at exit.
+        d = tempfile.mkdtemp(prefix="eva-check-", dir=os.path.dirname(os.path.abspath(__file__)))
+        atexit.register(shutil.rmtree, d, ignore_errors=True)
     path = os.path.join(d, "voice_level.json")
     vl = voice.VoiceLevel(path, "Headset")
     assert vl.level() is None
@@ -6538,6 +6544,127 @@ def next_level_hearing_reader_coder_watch():
         assert f'"id": "{tid}"' in sc, tid
 
 
+def the_world_sensor_sees_without_touching():
+    """Phase 1: the sensor reads the person's world but never acts on it."""
+    import collections
+    import time as _time
+    import desktop_control as dc
+    import pyautogui
+    import idle_behavior
+    import world_sensor
+
+    class FakeProbes:
+        def __init__(self):
+            self.clock = 100.0
+            self.cursor_pos = (200, 300)
+            self.title = "notes.txt - Notepad"
+            self.rect = (100, 100, 900, 700)
+            self.screen_size = (1920, 1080)
+            self.eva = (900, 700, 1000, 1080)
+            self.idle = 2.4
+            self.keys = 0.0
+            self.windows_list = [(1, "notes.txt - Notepad", (100, 100, 900, 700))]
+
+        def cursor(self): return self.cursor_pos
+        def foreground(self): return {"title": self.title, "rect": self.rect}
+        def screen(self): return self.screen_size
+        def eva_rect(self): return self.eva
+        def idle_seconds(self): return self.idle
+        def typing_rate(self): return self.keys
+        def windows(self): return list(self.windows_list)
+
+    # -- exact JSON shape and the plain editor sample -------------------------------------
+    probes, clock = FakeProbes(), {"t": 100.0}
+    sensor = world_sensor.WorldSensor(probes, clock=lambda: clock["t"])
+    w = sensor.sample()
+    assert set(w) == {"t", "cursor", "speed", "window", "keys", "idle", "full", "new", "screen", "eva", "focus"}, w
+    assert set(w["window"]) == {"rect", "kind", "title"}, w["window"]
+    assert isinstance(w["t"], float) and isinstance(w["speed"], float)
+    assert isinstance(w["keys"], float) and isinstance(w["idle"], float)
+    assert isinstance(w["full"], bool) and isinstance(w["focus"], bool)
+    assert isinstance(w["cursor"], list) and len(w["cursor"]) == 2 and all(isinstance(v, int) for v in w["cursor"])
+    assert isinstance(w["screen"], list) and len(w["screen"]) == 2 and all(isinstance(v, int) for v in w["screen"])
+    assert isinstance(w["eva"], list) and len(w["eva"]) == 4 and all(isinstance(v, int) for v in w["eva"])
+    assert isinstance(w["window"]["rect"], list) and len(w["window"]["rect"]) == 4
+    assert all(isinstance(v, int) for v in w["window"]["rect"])
+    assert w["window"]["title"] == "notes.txt - Notepad" and len(w["window"]["title"]) <= 80
+    assert w["window"]["kind"] == "editor" and w["window"]["kind"] in world_sensor.KINDS
+    assert 0.0 <= w["speed"] <= 5000.0 and w["keys"] >= 0.0 and w["idle"] >= 0.0
+    assert w["cursor"] == [200, 300] and w["screen"] == [1920, 1080] and w["eva"] == [900, 700, 1000, 1080]
+    assert w["new"] is None, "the first sample must not announce every window that already exists"
+
+    # -- focus: a call, a full-screen window, or fast typing -------------------------------
+    probes.title = "Zoom Meeting"
+    w = sensor.sample()
+    assert w["window"]["kind"] == "call" and w["focus"] is True
+    probes.title, probes.rect = "notes.txt - Notepad", (0, 0, 1920, 1080)
+    w = sensor.sample()
+    assert w["full"] is True and w["focus"] is True
+    # a MAXIMISED window stops at the taskbar: not full screen, so she does not sit in focus mode all day
+    probes.rect = (0, 0, 1920, 1032)
+    w = sensor.sample()
+    assert w["full"] is False and w["focus"] is False, w
+    probes.rect = (0, 0, 1920, 1080)
+    w = sensor.sample()
+    probes.rect, probes.keys = (100, 100, 900, 700), 130
+    assert sensor.sample()["focus"] is True, "130 keys/min must be focus mode"
+    probes.keys = 60
+    assert sensor.sample()["focus"] is False, "60 keys/min is ordinary work"
+
+    # -- a new notification and a new window ----------------------------------------------
+    probes, clock = FakeProbes(), {"t": 200.0}
+    sensor = world_sensor.WorldSensor(probes, clock=lambda: clock["t"])
+    assert sensor.sample()["new"] is None
+    clock["t"] += 0.5
+    probes.windows_list.append((2, "Toast", (10, 10, 410, 210)))
+    w = sensor.sample()
+    assert w["new"] is not None, "a new window was not noticed"
+    assert w["new"]["kind"] == "notification", w["new"]
+    assert w["new"]["rect"] == [10, 10, 410, 210] and w["new"]["at"] == clock["t"]
+    clock["t"] += 0.5
+    probes.windows_list.append((3, "Big", (500, 100, 1500, 900)))
+    w = sensor.sample()
+    assert w["new"] is not None and w["new"]["kind"] == "window", w["new"]
+    assert w["new"]["rect"] == [500, 100, 1500, 900]
+
+    # -- typing rate: six keys inside three seconds = 120/min ------------------------------
+    old_ts = idle_behavior._key_ts
+    try:
+        now = 1000.0
+        idle_behavior._key_ts = collections.deque(
+            [now - 2.9, now - 2.4, now - 1.9, now - 1.4, now - 0.9, now - 0.4], maxlen=60)
+        rate = idle_behavior.get_typing_rate(now=now)
+        assert 110 <= rate <= 130, rate
+        idle_behavior._key_ts.clear()
+        assert idle_behavior.get_typing_rate(now=now) == 0.0
+    finally:
+        idle_behavior._key_ts = old_ts
+
+    # -- read-only: none of the acting paths may be reachable, or even named ---------------
+    originals = [(dc, "focus_window"), (dc, "type_text"), (dc, "click_coords"), (pyautogui, "click")]
+    saved = [(module, name, getattr(module, name, None), hasattr(module, name)) for module, name in originals]
+    try:
+        for module, name in originals:
+            def _forbidden(*a, **k):
+                raise AssertionError("the world sensor must never act on a window")
+            setattr(module, name, _forbidden)
+        started = _time.time()
+        world_sensor.WorldSensor(FakeProbes(), clock=lambda: 300.0).sample()
+        assert _time.time() - started < 5, "a world sample took five seconds"
+    finally:
+        for module, name, original, had in saved:
+            if had:
+                setattr(module, name, original)
+            else:
+                try:
+                    delattr(module, name)
+                except AttributeError:
+                    pass
+    src = _source("world_sensor")
+    for forbidden in ("SetForegroundWindow", "type_text", "click_coords", "pyautogui"):
+        assert forbidden not in src, f"world_sensor.py mentions {forbidden}: it must only read"
+
+
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",
                    animation_follows_the_task),
                   ("the agent drives the activity pose: thinking -> per tool -> idle",
@@ -6629,7 +6756,8 @@ for label, fn in [("the animation pose follows the task (tool and skill both map
                   ("fixes from the 10:01 log: read aloud on request, word-less replies dropped",
                    fixes_from_the_1001_log),
                   ("next level: hearing, second provider, fast reader, coding helper, being shown",
-                   next_level_hearing_reader_coder_watch)]:
+                   next_level_hearing_reader_coder_watch),
+                   ("the world sensor sees without touching windows", the_world_sensor_sees_without_touching)]:
     check(label, fn)
 
 print()

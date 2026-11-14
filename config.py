@@ -94,6 +94,15 @@ IDLE_LIFE = True
 # The human connection (2026-10-17): eye contact, her eyes following the cursor near her, a nod
 # when spoken to, weight shifts and fidgets that grow when nobody has needed her for a while.
 PRESENCE = True
+# Phase 1 senses (2026-11-14): a compact world sample (cursor, foreground window, typing, idle,
+# full screen, new windows) sent to the page ~8 times a second, and the page's attention system
+# that scores targets and looks at them. Focus mode is stricter: when the person types fast,
+# is full screen or in a call she only glances rarely and stays still. All are visual only.
+EVA_WORLD = True
+EVA_ATTENTION = True
+EVA_FOCUS_MODE = True
+EVA_WORLD_HZ = 8
+EVA_FOCUS_TYPING_KEYS_PER_MIN = 120
 # Bored for a while with the person around: she looks around the PC (disk, old downloads, memory
 # and CPU hogs, Recycle Bin, open windows, battery) and OFFERS one fix. Never acts on her own.
 PATROL = True
