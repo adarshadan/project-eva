@@ -1572,11 +1572,24 @@ def reach_spot(x, y, w, h, screen):
     return max(left + w // 2, min(fx, right - w // 2)), max(top + h, min(fy, bottom))
 
 
+def _dpr():
+    try:
+        return float(QApplication.primaryScreen().devicePixelRatio() or 1.0)
+    except Exception:
+        return 1.0
+
+
 def _window_rect(hwnd):
+    """A window's rect in Qt's (logical) pixels, the ones her own position uses. Win32 answers in physical
+    pixels: at 125 % scaling the two differ, and sitting on a title bar put her above or below it
+    (manager review, 2026-11-14)."""
     try:
         import desktop_control as dc
         r = dc.get_window_rect(hwnd)
-        return (r["left"], r["top"], r["right"], r["bottom"]) if r else None
+        if not r:
+            return None
+        k = _dpr()
+        return (int(r["left"] / k), int(r["top"] / k), int(r["right"] / k), int(r["bottom"] / k))
     except Exception:
         return None
 
@@ -1602,7 +1615,8 @@ def _window_edge_near(x, y, tolerance=14):
             left, top, right, _b = r
             if left + 20 <= x <= right - 20 and abs(y - top) <= tolerance and top > _screen_rect()[1] + 40:
                 import ctypes.wintypes
-                pt = ctypes.wintypes.POINT(int(x), int(top) + 6)
+                k = _dpr()                       # WindowFromPoint wants physical pixels
+                pt = ctypes.wintypes.POINT(int(x * k), int((top + 6) * k))
                 ctypes.windll.user32.WindowFromPoint.restype = ctypes.c_void_p
                 ctypes.windll.user32.GetAncestor.restype = ctypes.c_void_p
                 hit = ctypes.windll.user32.WindowFromPoint(pt)
