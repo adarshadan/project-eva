@@ -1288,7 +1288,7 @@ def _select_tab(element):
     return None
 
 
-def switch_browser_tab(window_handle: int, title_contains: str = "", index: int = 0):
+def switch_browser_tab(window_handle: int = 0, title_contains: str = "", index: int = 0):
     """Switches to a tab of a browser the person has open, by words in its
     title, or by position (1 = first, -1 = last, -2 = second to last).
 
@@ -1299,6 +1299,23 @@ def switch_browser_tab(window_handle: int, title_contains: str = "", index: int 
     order, by name) and the one wanted is selected directly. Without UI
     Automation it falls back to Ctrl+PageDown, which moves through the strip
     in order in every browser."""
+    if not window_handle:
+        windows = list_windows().get("windows", [])
+        browsers = [w for w in windows if any(b in w.get("title", "").lower() for b in ("opera", "chrome", "brave", "edge", "firefox"))]
+        want = str(title_contains or "").strip().lower()
+        found_h = None
+        if want:
+            for b in browsers:
+                tabs = _browser_tabs(b["handle"])
+                if any(want in nm.lower() for nm, _ in tabs):
+                    found_h = b["handle"]
+                    break
+        if not found_h and browsers:
+            found_h = browsers[0]["handle"]
+        if not found_h:
+            return {"ok": False, "error": "No open browser windows found"}
+        window_handle = found_h
+
     res = focus_window(window_handle)
     if not res.get("ok"):
         return res

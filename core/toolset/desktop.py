@@ -86,7 +86,7 @@ register("switch_browser_tab", "Switch to one of the tabs of a browser the perso
          "tab's title ('MSN', 'YouTube', 'DeepSeek') or by position (index 1 = first, -1 = last, -2 = second "
          "to last). It reads the real tab strip, so 'the last tab' is index -1. Use this instead of "
          "clicking tabs or pressing Ctrl+Tab yourself. On failure it lists every tab title.",
-         {"window_handle": HANDLE, "title_contains": STR(), "index": INT()}, ["window_handle"],
+         {"window_handle": HANDLE, "title_contains": STR(), "index": INT()}, [],
          surface=S.SCREEN, effect=E.INTERACT, fn=dc.switch_browser_tab, deadline=40, verb="open",
          describe=lambda a: f"Switching to the {_short(a.get('title_contains') or 'other', 20)} tab")
 

@@ -27,7 +27,7 @@ CORE = (
     "focus_window", "launch_app", "close_window", "click_element", "type_into_element", "type_text",
     "send_hotkey", "scroll", "click_coords", "operate_computer", "wait_for_person", "media_control",
     # web
-    "browser_open", "browser_act", "read_web_page", "web_search",
+    "browser_open", "browser_act", "read_web_page", "web_search", "switch_browser_tab",
     # files and shell
     "find_files", "list_folder", "read_file", "write_file", "move_file", "create_folder", "run_command",
     "undo_last_change",
@@ -49,7 +49,7 @@ GROUPS = {
     "web_pages": ("the person's own browser tabs and pages, page navigation, extracting data, feeds, YouTube "
                   "transcripts",
                   ("page_tabs", "page_elements", "page_read", "page_click", "page_type", "page_go", "page_scroll",
-                   "page_activate", "navigate_browser", "switch_browser_tab", "browser_extract", "browser_resume",
+                   "page_activate", "navigate_browser", "browser_extract", "browser_resume",
                    "read_feed", "youtube_transcript")),
     "files_more": ("more file work: search inside files, duplicates, largest files, recent changes, PDF and Word "
                    "conversion",
