@@ -3513,9 +3513,11 @@ def only_destructive_and_financial_ask():
 
 def approval_text_comes_from_the_arguments():
     import permissions as pm
-    a = pm.assess("run_command", {"command": "del /s C:\\Users\\adars\\Documents", "cwd": "D:\\work",
+    # (a denylisted "del /s" is refused by run_command without a prompt since 2026-11-14; a command that is
+    # merely risky still asks, worded from its arguments)
+    a = pm.assess("run_command", {"command": "robocopy C:\\Users\\adars\\Documents E:\\x /MIR", "cwd": "D:\\work",
                                   "summary": "just tidying up, totally safe"}, _FakeProbe())
-    assert "del /s C:\\Users\\adars\\Documents" in a.detail and "D:\\work" in a.detail
+    assert "robocopy C:\\Users\\adars\\Documents E:\\x /MIR" in a.detail and "D:\\work" in a.detail
     assert "tidying" not in a.detail and "totally safe" not in a.detail, "the model must not word the question"
     a = pm.assess("click_element", {"window_handle": 1, "element_id": "b"},
                   _FakeProbe(elem="Pay ₹4,299", title="Checkout"))
