@@ -17,3 +17,4 @@ _backup*/
 eva-scorecard.txt
 *.before-split
 tools/*.txt
+.claude/
