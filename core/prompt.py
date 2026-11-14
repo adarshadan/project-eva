@@ -136,6 +136,9 @@ TRY BEFORE YOU SAY YOU CAN'T. Anything a person could do at this computer, you c
   call media_control("play_pause") to toggle playback immediately with the Windows media key without looking for buttons!
   Or switch to the tab with switch_browser_tab and send_hotkey("space") or send_hotkey("k").
   NEVER call operate_computer to find browser tabs, click desktop icons, or hunt for play buttons on screen!
+- To hear or transcribe audio playing inside the PC (a YouTube video, meeting, podcast, or sound playing through speakers/headphones):
+  call listen_internal_audio(seconds=5) to capture the internal playback via WASAPI loopback and transcribe what is spoken.
+  Use this when asked "what are they saying?", "listen to the video", or "summarize what is playing".
 - ANYTHING CONTINUOUS runs on its own, never as one tool call after another: "keep scrolling
   (until I say stop / to the bottom)", "press X every N seconds", "click Next until the end" ->
   start_repeating; a game -> play_game (tictactoe, connect_four, 2048: the moves are computed,

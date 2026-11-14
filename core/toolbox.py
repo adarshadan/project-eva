@@ -27,7 +27,7 @@ CORE = (
     "focus_window", "launch_app", "close_window", "click_element", "type_into_element", "type_text",
     "send_hotkey", "scroll", "click_coords", "operate_computer", "wait_for_person", "media_control",
     # web
-    "browser_open", "browser_act", "read_web_page", "web_search", "switch_browser_tab",
+    "browser_open", "browser_act", "read_web_page", "web_search", "switch_browser_tab", "listen_internal_audio",
     # files and shell
     "find_files", "list_folder", "read_file", "write_file", "move_file", "create_folder", "run_command",
     "undo_last_change",

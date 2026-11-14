@@ -55,6 +55,20 @@ register("youtube_transcript", "Get the spoken words of a YouTube video (its cap
          {"url": STR("The video's address or id."), "language": STR("Preferred caption language, default en.")},
          ["url"], surface=S.BROWSER, effect=E.OBSERVE, fn=web_reach.youtube_transcript, deadline=60,
          verb="read", web=True, describe=lambda a: "Getting the video's transcript")
+
+
+def _listen_audio(seconds=5, question=""):
+    from core import internal_audio
+    return internal_audio.capture_internal_audio(seconds=seconds, transcribe=True)
+
+
+register("listen_internal_audio", "Listen to what is currently playing through the computer speakers or headphones "
+         "(YouTube, meeting, video, podcast, music, game) using WASAPI loopback, and transcribe any spoken words. "
+         "Use this when asked 'what are they saying?', 'listen to the video', 'summarize what is playing', or to hear "
+         "audio playing on the PC.",
+         {"seconds": INT("Seconds to listen, 2-15. Default 5."), "question": STR("What to listen for (optional).")}, [],
+         surface=S.SYSTEM, effect=E.OBSERVE, fn=_listen_audio, deadline=35, verb="look",
+         describe=lambda a: "Listening to internal PC audio")
 register("read_feed", "Newest items of an RSS or Atom feed (news, blogs, podcasts): titles, links, dates.",
          {"url": STR(), "limit": INT("Default 10, at most 30.")}, ["url"],
          surface=S.BROWSER, effect=E.OBSERVE, fn=web_reach.read_feed, deadline=45, verb="read", web=True,
