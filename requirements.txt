@@ -36,6 +36,3 @@ pywin32; sys_platform == "win32"
 winocr; sys_platform == "win32"
 nvidia-riva-client      # speech recognition with NVIDIA's free recognisers (stt_nvidia.py)
 
-# Phase 4 (music.py): what the PC plays, through WASAPI loopback -- a PyAudio fork (module pyaudiowpatch, so it
-# does not clash with PyAudio above). Imported lazily: without it Eva starts and the music feature is just off.
-PyAudioWPatch==0.2.12.9; sys_platform == "win32"
