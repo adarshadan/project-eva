@@ -838,6 +838,8 @@ class AvatarWidget(QWidget):
         focus_mode = "true" if getattr(config, "EVA_FOCUS_MODE", True) else "false"
         self.view.page().runJavaScript(
             f"window.EVA_ATTENTION = {attention}; window.EVA_FOCUS_MODE = {focus_mode};")
+        import body_life                      # Phase 3: body life, cloth physics and their tuning
+        self.view.page().runJavaScript(body_life.page_flags_js(config))
         self._speaking_sent = None            # a reloaded page has forgotten it
         self._activity_sent = None
         if hasattr(self, "_body"):

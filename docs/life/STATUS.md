@@ -6,3 +6,4 @@ Design: docs/life/LIFE_DESIGN.md. One line per finished phase.
 - Phase 1 approved by the manager (Claude) -- 2026-11-14 -- review fixes: Win32 rects converted to Qt logical
   pixels (they were mixed with the cursor's at 125 % scaling), and "full screen" now means the whole monitor
   including the taskbar (a maximised window had counted, which would have kept her in focus mode all day).
+- Phase 3 built -- 2026-11-14 -- body that moves like a person: body-life layer in avatar_3d.html (energy-scaled breathing, weight shift with planted feet, head-leads/torso-follows overlap, anticipation and overshoot-settle, Perlin micro-motion, walk sway and rounded stride, spring-turn) plus cloth driving the model's own spring bones (walk inertia and breeze), flags EVA_BODY_LIFE/EVA_CLOTH_PHYSICS via body_life.py -- tests: node tools/motion_test.js all 29 pass; run_checks.py All checks passed. -- awaiting manager review
