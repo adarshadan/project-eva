@@ -28,14 +28,20 @@ register("walk_to_screen", "Walk yourself to a screen position and stand there (
          "your feet). This is how you go somewhere: 'come here', 'go to the right side'. Use "
          "get_screen_size to find sides and corners. You stay where you are sent. To SIT on a "
          "window use sit_on_window instead.",
-         {"x": INT(), "y": INT()}, ["x", "y"], surface=S.SELF, effect=E.OBSERVE, embodied=False)
+         {"x": INT(), "y": INT(),
+          "float_in_air": BOOL("Only when the person asks you to float or fly there. Otherwise a spot that is not "
+                               "on a window's top edge puts you on the taskbar below it.")},
+         ["x", "y"], surface=S.SELF, effect=E.OBSERVE, embodied=False)
 register("sit_on_window", "Sit on top of a window, on its title bar, legs over the edge -- for 'sit on "
          "that window', 'go sit on Notepad'. You ride along when it moves, and hop down if it is "
          "minimised, maximised or closed. Do not use walk_to_screen for this: walking only stands.",
          {"window_handle": INT(), "spot": STR("Where along its top: left, middle or right. Default middle.",
                                                enum=["left", "middle", "right"])}, ["window_handle"],
          surface=S.SELF, effect=E.OBSERVE, embodied=False)
-register("sit_down", "Sit down where you are (on the taskbar, or on the window edge you stand on).",
+register("sit_down", "Sit down: where you are (on the taskbar, or the window edge you stand on), or with spot on "
+         "that part of the taskbar -- 'sit on the right side of the taskbar' is ONE call: sit_down(spot='right'). "
+         "You never sit in mid-air.",
+         {"spot": STR("Optional: left, middle or right of the taskbar.", enum=["left", "middle", "right"])},
          surface=S.SELF, effect=E.OBSERVE, embodied=False)
 register("stand_up", "Stand up (and come down to the taskbar if you were sitting on a window).",
          {"come_down": BOOL("Also come down to the taskbar. Default false.")},

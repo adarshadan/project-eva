@@ -90,8 +90,22 @@ def bind_presence(avatar, run_on_gui_sync, fire_on_gui):
         run_on_gui_sync(avatar.stop)
         return {"ok": True}
 
-    def walk_to_screen(x, y):
+    def _ground_y():
+        import avatar_ui as ui
+        return run_on_gui_sync(lambda: ui._screen_rect()[3])
+
+    def walk_to_screen(x, y, float_in_air=False):
+        """2026-11-14: "go to the right side" gave y=540 and she stood floating mid-screen ("You seem to be
+        floating in the air"). A spot that is not on a window's top edge now means the taskbar under it,
+        unless the person asked for her to float there."""
         done = threading.Event()
+        try:
+            import avatar_ui as ui
+            ground = _ground_y()
+            if not float_in_air and ground and abs(int(y) - ground) > 12 and not ui._window_edge_near(int(x), int(y), 24):
+                y = ground
+        except Exception:
+            pass
 
         def start():
             def arrived():
@@ -134,13 +148,31 @@ def bind_presence(avatar, run_on_gui_sync, fire_on_gui):
         return {"ok": sat, "verified": sat, "sitting_on": window_handle if sat else None,
                 **({} if sat else {"error": "she got there but is not sitting on it"})}
 
-    def sit_down():
-        def go():
-            import avatar_ui as ui
-            avatar.mark_placed()
+    def sit_down(spot=""):
+        """Sit where she is -- or, with spot left/middle/right, on that part of the taskbar. Never in mid-air:
+        with no window edge under her she goes down to the taskbar first (2026-11-14: she sat floating)."""
+        import avatar_ui as ui
+        spot = str(spot or "").lower()
+        if spot in ("left", "middle", "right"):
+            l, _t, r, ground = run_on_gui_sync(lambda: ui._screen_rect())
+            w = run_on_gui_sync(avatar.width) or 115
+            x = {"left": l + w, "middle": (l + r) // 2, "right": r - w}[spot]
+            walk_to_screen(x, ground)
+            return sit_down("")
+
+        def where():
             feet = avatar.y() + avatar.height()
-            edge = None if avatar.on_ground() else ui._window_edge_near(avatar.x() + avatar.width() // 2, feet)
-            if edge:
+            if avatar.on_ground():
+                return "ground", None
+            edge = ui._window_edge_near(avatar.x() + avatar.width() // 2, feet)
+            return ("edge", edge) if edge else ("air", None)
+        kind, edge = run_on_gui_sync(where) or ("ground", None)
+        if kind == "air":
+            walk_to_screen(run_on_gui_sync(lambda: avatar.x() + avatar.width() // 2), _ground_y())
+
+        def go():
+            avatar.mark_placed()
+            if kind == "edge" and edge:
                 hwnd, top = edge
                 avatar.sit_here(top, hwnd)          # on that window: she rides along with it
             else:
