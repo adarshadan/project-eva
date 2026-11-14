@@ -46,7 +46,9 @@ function world(seed = 12345) {
                  walkW: () => walkW, life, presenceStep, setAffect: window.setAffect, emote: window.emote,
                  setWorld: window.setWorld, presence, acknowledge: window.acknowledge,
                  affect: () => affect, bl, bnoise, BL_NOISE, stridePlant, faceStep, cloth, clothStep, blFollow: _blFollow,
-                 bodyLifeApply, setLocomotion: window.setLocomotion };`, ctx);
+                 bodyLifeApply, setLocomotion: window.setLocomotion,
+                 drives, takeDriveIntents: window.takeDriveIntents,
+                 driveResult: window.driveResult, setBodyState: window.setBodyState, BEHAVIOURS };`, ctx);
   const api = ctx.api;
   let t = 0;
   const frame = (dt = 1 / 30) => {
@@ -810,5 +812,175 @@ check('she does not dance in focus mode, with no music, on stale or bad input, o
 });
 
 Math.random = realRandom;
+// ---- Phase 2: drives and the utility selector ------------------------------------------------
+// Runs the page for a long stretch at 30 fps with the world arriving at 8 Hz, and plays Python's part for the
+// intents the page queues (a wander moves her, a sit sits her), so the page sees the consequences.
+function simulate(w, seconds, script, opts) {
+  opts = opts || {};
+  const run = stepper(w);
+  const frames = Math.round(seconds * 30), D = w.api.drives;
+  const lo = {}, hi = {}, names = ['energy', 'curiosity', 'boredom', 'social', 'focusRespect'];
+  names.forEach((n) => { lo[n] = 1; hi[n] = 0; });
+  const out = { intents: [], worst: 0, lo, hi, worstAt: '' };
+  let eva = (opts.eva || [850, 700, 1000, 1080]).slice(), sitting = false, last = null, prev = null;
+  for (let i = 0; i < frames; i++) {
+    const ts = i / 30;
+    if (i % 4 === 0) { last = worldPayload(Object.assign({ eva: eva.slice() }, script(ts))); w.api.setWorld(last); }
+    run.step();
+    const raw = w.api.takeDriveIntents();
+    if (raw) for (const it of JSON.parse(raw)) {
+      out.intents.push({ at: ts, it, eva: eva.slice(), payload: last });
+      if (it.kind === 'sit') { sitting = true; w.api.setBodyState({ sitting: true }); }
+      else {
+        const half = (eva[2] - eva[0]) / 2, x = Math.max(half, Math.min(1920 - half, it.x));
+        eva = [x - half, eva[1], x + half, eva[3]];
+        if (sitting) { sitting = false; w.api.setBodyState({ sitting: false }); }
+      }
+    }
+    const s = snapshot(w.bones);
+    if (prev) { const m = maxStep(prev, s); if (m > out.worst) { out.worst = m; out.worstAt = `t=${ts.toFixed(1)}s beh=${w.api.presence.beh && w.api.presence.beh.name}`; } }
+    prev = s;
+    for (const n of names) { lo[n] = Math.min(lo[n], D[n]); hi[n] = Math.max(hi[n], D[n]); }
+  }
+  out.names = () => w.api.presence.behLog.filter((e) => !e.failed).map((e) => e.name);
+  return out;
+}
+const quietScript = () => ({ idle: 30, speed: 0, keys: 0 });
+const gapPoint = (p, r) => Math.hypot(Math.max(r[0] - p[0], p[0] - r[2], 0), Math.max(r[1] - p[1], p[1] - r[3], 0));
+const gapRect = (a, b) => Math.hypot(Math.max(b[0] - a[2], a[0] - b[2], 0), Math.max(b[1] - a[3], a[1] - b[3], 0));
+
+check('drives rise and fall on their own, stay in [0,1], and never snap her pose (10 simulated minutes)', () => {
+  const w = world();
+  // a day in miniature: quiet, then typing, then new windows, then the person leaves and returns, then night
+  const script = (t) => {
+    if (t >= 300) w.api.drives.hourOverride = 23;
+    if (t < 180) return { idle: 30 };
+    if (t < 240) return { keys: 200, idle: 0, focus: true };
+    if (t < 300) return { keys: 0, idle: 5, speed: (Math.floor(t / 4) % 3) * 200, new: { rect: [10, 300, 400, 500], at: Math.floor(t / 20) + 1, kind: 'window' } };
+    if (t < 480) return { idle: 130 + (t - 300) };
+    return { idle: 1 };
+  };
+  w.api.drives.hourOverride = 14;
+  const r = simulate(w, 600, script);
+  for (const n in r.lo) {
+    assert(r.lo[n] >= 0 && r.hi[n] <= 1, `${n} left [0,1]: ${r.lo[n]}..${r.hi[n]}`);
+    assert(r.hi[n] - r.lo[n] > 0.05, `${n} never moved on its own (${r.lo[n].toFixed(2)}..${r.hi[n].toFixed(2)})`);
+  }
+  assert(r.worst <= MAX_PER_FRAME, `a bone jumped ${r.worst.toFixed(3)} rad in one frame (${r.worstAt})`);
+  assert(r.names().length > 40, `she barely did anything in ten minutes (${r.names().length})`);
+});
+
+check('no sequence of three behaviours repeats exactly in 10 minutes; each pick draws fresh parameters', () => {
+  const w = world();
+  w.api.drives.hourOverride = 14;
+  const r = simulate(w, 600, quietScript);
+  const n = r.names(), seen = new Map();
+  for (let i = 2; i < n.length; i++) {
+    const k = n[i - 2] + '>' + n[i - 1] + '>' + n[i];
+    assert(!seen.has(k), `the sequence ${k} came twice (picks ${seen.get(k)} and ${i})`);
+    seen.set(k, i);
+  }
+  const kinds = new Set(n);
+  assert(kinds.size >= 8, `only ${kinds.size} different behaviours in ten minutes: ${[...kinds].join(', ')}`);
+  const sigs = {};
+  for (const e of w.api.presence.behLog) (sigs[e.name] = sigs[e.name] || []).push(JSON.stringify(e.pr, (k, v) => typeof v === 'number' ? +v.toFixed(4) : v));
+  let repeated = 0;
+  for (const name in sigs) if (sigs[name].length >= 2) {
+    repeated++;
+    assert(new Set(sigs[name]).size === sigs[name].length, `two ${name} behaviours came with identical parameters`);
+  }
+  assert(repeated >= 5, 'too few behaviours came twice to judge their parameters');
+  // utility, not a script: with the same world a tired night differs from a bright afternoon
+  const count = (hour, name) => { let total = 0;
+    for (let k = 0; k < 6; k++) { const x = world(); x.api.drives.hourOverride = hour;
+      x.api.drives.energy = hour === 3 ? 0.15 : 0.9; total += simulate(x, 300, quietScript).names().filter((m) => m === name).length; }
+    return total; };
+  const yawnsNight = count(3, 'yawn'), yawnsDay = count(14, 'yawn');
+  assert(yawnsNight > 1.3 * yawnsDay, `she yawns no more at 3 am (${yawnsNight}) than at 2 pm (${yawnsDay})`);
+});
+
+check('she waves when the person comes back after being away', () => {
+  const w = world();
+  const script = (t) => (t < 130 ? { idle: 30 + t } : { idle: Math.max(0, t - 131) });
+  const r = simulate(w, 150, script);
+  const wave = w.api.presence.behLog.find((e) => e.name === 'wave_return');
+  assert(wave, 'no wave when the person came back');
+  assert(wave.at - w.api.drives.returnedAt < 15 && wave.at >= w.api.drives.returnedAt, 'the wave was not tied to the return');
+  const early = w.api.presence.behLog.filter((e) => e.name === 'wave_return' && e.at < 100);
+  assert(early.length === 0, 'she waved although nobody had been away');
+});
+
+check('focus mode: only a corner settle and standing still, and nothing that moves the person\'s way', () => {
+  const w = world();
+  const r = simulate(w, 180, () => ({ focus: true, keys: 300, idle: 0 }));
+  const names = r.names();
+  assert(names.length > 0, 'she chose nothing at all in focus mode');
+  for (const n of names) assert(n === 'corner_settle' || n === 'stay_still', `${n} in focus mode`);
+  assert(r.intents.length <= 1, `${r.intents.length} moves in focus mode`);
+  for (const i of r.intents) assert(i.it.kind === 'corner', `intent ${i.it.kind} in focus mode`);
+  if (r.intents[0]) {
+    const half = 75, x = r.intents[0].it.x;
+    assert(x - half < 60 || x + half > 1920 - 60, `settled at x=${x}, not in a corner`);
+  }
+  const head = [], torso = [];
+  const w2 = world(); const run = stepper(w2);
+  for (let i = 0; i < 600; i++) { if (i % 4 === 0) w2.api.setWorld(worldPayload({ focus: true, keys: 300 })); run.step();
+    head.push(w2.api.presence.headYaw); torso.push(w2.api.presence.torsoYaw); }
+  assert(Math.max(...head) - Math.min(...head) < 3 && Math.max(...torso) - Math.min(...torso) < 1, 'she moved in focus mode');
+  // mid-lean when the person starts concentrating: she eases out, nothing new but stillness starts, no snap
+  const m = world(); m.api.drives.hourOverride = 14; const mrun = stepper(m);
+  const wp = (focus) => worldPayload(focus ? { focus: true, keys: 300 } : { idle: 30 });
+  let i = 0, switched = -1, prev = null, worst = 0;
+  for (; i < 15000 && switched < 0; i++) {
+    if (i % 4 === 0) m.api.setWorld(wp(false)); mrun.step();
+    const b = m.api.presence.beh; if (b && b.kind === 'pose' && !b.still && i > 60) switched = i;
+  }
+  assert(switched > 0, 'never found a posture behaviour to interrupt');
+  const startLog = m.api.presence.behLog.length;
+  prev = snapshot(m.bones);
+  for (let j = 0; j < 30 * 90; j++) {
+    if (j % 4 === 0) m.api.setWorld(wp(true)); mrun.step();
+    const s = snapshot(m.bones); worst = Math.max(worst, maxStep(prev, s)); prev = s;
+  }
+  const after = m.api.presence.behLog.slice(startLog).map((e) => e.name);
+  for (const n of after) assert(n === 'corner_settle' || n === 'stay_still', `${n} started after focus began`);
+  assert(worst <= MAX_PER_FRAME, `easing out of a lean snapped ${worst.toFixed(3)} rad`);
+});
+
+check('she keeps clear: no move ends or passes within 150 px of the cursor or the active window; leans go away from the cursor', () => {
+  const w = world();
+  w.api.drives.hourOverride = 14;
+  // the cursor roams the whole screen, often right beside her; the window sits in the middle
+  let cx = 960, cy = 540, seed = 7;
+  const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const script = (t) => { if (Math.floor(t * 8) !== Math.floor((t - 0.125) * 8)) { cx = 100 + rand() * 1720; cy = 300 + rand() * 780; }
+    return { cursor: [Math.round(cx), Math.round(cy)], idle: 30, speed: 0, window: { rect: [500, 200, 1100, 800], kind: 'editor', title: 'x' } }; };
+  const r = simulate(w, 600, script, { eva: [1500, 700, 1650, 1080] });
+  assert(r.intents.length >= 5, `too few moves to judge (${r.intents.length})`);
+  for (const { it, eva, payload } of r.intents) {
+    if (it.kind === 'sit') continue;
+    const half = (eva[2] - eva[0]) / 2, x = Math.max(half, Math.min(1920 - half, it.x));
+    const end = [x - half, eva[1], x + half, eva[3]];
+    const sweep = [Math.min(eva[0], end[0]), eva[1], Math.max(eva[2], end[2]), eva[3]];
+    const win = payload.window.rect;
+    for (const [name, gap] of [['cursor', (rc) => gapPoint(payload.cursor, rc)], ['window', (rc) => gapRect(rc, win)]]) {
+      assert(gap(end) >= 150, `she ended ${gap(end).toFixed(0)} px from the ${name}`);
+      assert(gap(sweep) >= Math.min(150, gap(eva)) - 1, `her path closed in on the ${name} (${gap(sweep).toFixed(0)} px, started ${gap(eva).toFixed(0)})`);
+    }
+  }
+  // direct: a cursor close on her right makes every lean (and no peek) go to her left
+  const t = world(); t.api.drives.hourOverride = 14;
+  simulate(t, 900, () => ({ cursor: [1100, 900], idle: 30, window: { rect: [100, 100, 700, 700], kind: 'editor', title: 'x' } }));
+  const leans = t.api.presence.behLog.filter((m) => m.name === 'lean');
+  assert(leans.length >= 2, 'no leans to judge');
+  for (const l of leans) assert(l.pr.side === -1, 'she leaned toward the cursor');
+});
+
+check('drives off: no behaviours, no intents, nothing changes (EVA_DRIVES = false)', () => {
+  const w = world(); w.ctx.window.EVA_DRIVES = false;
+  const r = simulate(w, 120, quietScript);
+  assert(r.names().length === 0 && r.intents.length === 0, 'she kept choosing behaviours with the flag off');
+});
+
 console.log(failures ? `\n${failures} motion check(s) FAILED` : '\nall motion checks passed');
 process.exit(failures ? 1 : 0);

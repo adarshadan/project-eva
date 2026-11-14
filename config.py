@@ -119,6 +119,15 @@ EVA_CLOTH_BREEZE = 1.0
 EVA_MUSIC = True
 EVA_MUSIC_HZ = 20
 EVA_MUSIC_DANCE = True
+# Phase 2 (2026-11-14): inner state and choosing what to do. Drives (energy, curiosity, boredom, social,
+# focus-respect) rise and fall on their own and a utility selector picks what she does every 2-6 s: wander
+# to a spot, sit, lean, peek, stretch, yawn, look around, hum, wave when you come back, settle in a corner
+# when you concentrate. Needs EVA_WORLD. When True the old scripted idle routines in life.py (random
+# stroll / sit / bored picks / welcome wave) are retired so the two never fight; False brings them back.
+# EVA_DRIVE_CLEAR_PX: she never moves toward, or stands within, this many pixels of the cursor or the
+# active window. Moves are visual only: she never clicks, types into or moves a person's window.
+EVA_DRIVES = True
+EVA_DRIVE_CLEAR_PX = 150
 # Bored for a while with the person around: she looks around the PC (disk, old downloads, memory
 # and CPU hogs, Recycle Bin, open windows, battery) and OFFERS one fix. Never acts on her own.
 PATROL = True

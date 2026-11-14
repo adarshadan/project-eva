@@ -799,6 +799,38 @@ class AvatarWidget(QWidget):
         clean = {k: music.get(k) for k in ("playing", "bpm", "phase", "energy", "low", "high")
                  if isinstance(music, dict)}
         self.view.page().runJavaScript("if (window.setMusic) setMusic(" + json.dumps(clean) + ");")
+    def poll_drive_intents(self, callback):
+        """Phase 2: asks the page which moves its drives queued (wander / sit / corner). callback(list of dicts)
+        runs on the GUI thread. The page only ASKS; drive_guard.DriveExecutor vets and executes."""
+        import json
+
+        def got(raw):
+            try:
+                items = json.loads(raw) if raw else []
+            except Exception:
+                items = []
+            if items:
+                callback(items)
+        self.view.page().runJavaScript("window.takeDriveIntents ? takeDriveIntents() : ''", got)
+
+    def drive_result(self, res: dict):
+        """Tells the page whether an intent was carried out, so a refused behaviour ends at once."""
+        import json
+        self.view.page().runJavaScript("if (window.driveResult) driveResult(" + json.dumps(res) + ");")
+
+    def halt_walk(self):
+        """Stops a walk where she is (a drive walk that the cursor or a window closed in on)."""
+        if self._walk_target is None:
+            return
+        self._walk_timer.stop()
+        self._walk_target = None
+        self._walk_plan = None
+        self._walk_on_arrive = None
+        self._set_render_fps(None)
+        self._set_locomotion(False, 0)
+        self._sync_stage(force=True)
+        self.play("idle")
+        self.update_footing()
 
     def acknowledge(self):
         """The person spoke to her: a small nod and a smile."""
@@ -842,6 +874,9 @@ class AvatarWidget(QWidget):
         speed = float(getattr(config, "ANIMATION_SPEED", 1.0) or 1.0)
         self.view.page().runJavaScript(f"window.EVA_LIFE = {life}; window.EVA_TUNE = {tune}; "
                                        f"window.EVA_SPEED = {max(0.5, min(1.6, speed)):.3f};")
+        drives = "true" if getattr(config, "EVA_DRIVES", True) else "false"
+        self.view.page().runJavaScript(
+            f"window.EVA_DRIVES = {drives}; window.EVA_CLEAR_PX = {int(getattr(config, 'EVA_DRIVE_CLEAR_PX', 150))};")
         attention = "true" if getattr(config, "EVA_ATTENTION", True) else "false"
         focus_mode = "true" if getattr(config, "EVA_FOCUS_MODE", True) else "false"
         self.view.page().runJavaScript(

@@ -620,6 +620,8 @@ const presence = {
   spokenAt: -1e9, aim: null, cand: {}, newAt: null, newRect: null,
   curious: null, focus: false, nextFocusGlance: 0, glanceCount: 0,
   torsoYaw: 0, torsoPitch: 0,
+  // Phase 2: what she is doing (beh), when she next chooses, what she did, intents for Python to vet
+  beh: null, nextPick: null, hist: [], tripleLog: [], behLog: [], intents: [], cool: {}, driveSeq: 0, cornerDone: false,
 };
 window.setAttention = function (dx, dy, moving, hover) {
   // dx, dy: where the cursor is from her head, -1..1 (right / down positive, screen space)
@@ -775,6 +777,340 @@ function attentionStep(P, now, dt) {
   if (P.cand.curious > 0 && P.curious) consider('curious', P.cand.curious, P.curious.x, P.curious.y);
   pickAim(P, best, now, dt);
 }
+// ---------------------------------------------------------------------------
+// Inner state and choosing what to do (Phase 2, docs/life/LIFE_DESIGN.md).
+// Five DRIVES in [0,1] rise and fall on their own -- energy (time of day, exertion), curiosity (new things),
+// boredom (nothing happening), social (time since the person talked to her), focusRespect (the person's
+// focus). A UTILITY selector wakes every 2-6 s, scores every parameterised behaviour against the drives and
+// the world sample (Phase 1), and picks one with softmax noise; each pick draws fresh parameters. One table,
+// PERSONALITY, holds her character as rates and weights. Behaviours reuse what exists: gestures (PROC),
+// eased posture offsets, the walk. Anything that has to MOVE her window is only an INTENT: Python
+// (drive_guard.py) polls takeDriveIntents(), re-checks the respect rules against the real cursor and window,
+// and executes with the existing walk/sit. Visual only -- she never acts on a person's window.
+// Respect rules: a move never ends (or passes) within EVA_CLEAR_PX of the cursor or the active window; leans
+// go away from the cursor; in focus mode only corner_settle / stay_still are possible.
+// ---------------------------------------------------------------------------
+window.EVA_DRIVES = true;
+window.EVA_CLEAR_PX = 150;
+const PERSONALITY = {
+  // her character: 0..1. bubbly = energy and lightness, inquisitive = curiosity, friendly = wants the
+  // person, playful = gets bored quickly and fills the time, respectful = backs off when the person works
+  traits: { bubbly: 0.8, inquisitive: 0.75, friendly: 0.85, playful: 0.7, respectful: 0.9 },
+  rate: { energyEase: 0.02, curiosityEase: 0.02, boredomUp: 0.010, boredomDown: 0.10, socialEase: 0.03,
+          socialDown: 0.25, focusIn: 0.8, focusOut: 0.07, awayAfter: 120 },
+  temperature: 0.35,           // softmax noise: higher = more adventurous picks
+  repeatPenalty: 0.2,          // score factor when the same thing would come twice in a row
+  gap: [4, 10],                // seconds between one pick and the next (manager: 2-6 s was too busy)
+  novelty: 400,                // a behaviour triple seen in the last N picks is not picked again
+  weight: { wander: 1.0, sit: 0.9, lean: 0.8, peek: 0.9, stretch: 0.8, yawn: 0.9, look_around: 1.0,
+            hum_sway: 0.9, check_in: 0.8, wave_return: 1.0, corner_settle: 1.0, stay_still: 1.1 },
+};
+const drives = { energy: 0.65, curiosity: 0.35, boredom: 0.15, social: 0.2, focusRespect: 0,
+                 hourOverride: null, _hour: 12, _hourAt: -1e9, prevIdle: 0, seenNew: 0,
+                 returnedAt: -1e9, waved: true, wasFocus: false, born: -1 };
+const GESTURE_OF = { stretch: 'p_stretch_up', yawn: 'p_yawn', look_around: 'p_look_around',
+                     hum_sway: 'p_hum', wave_return: 'p_wave' };
+// what doing a thing does to her drives (added when it ends): action satisfies the need that chose it
+const DRIVE_EFFECT = {
+  wander: { energy: -0.02, boredom: -0.15, curiosity: -0.05 }, sit: { energy: 0.10, boredom: 0.05 },
+  lean: { energy: 0.03, boredom: -0.03 }, peek: { curiosity: -0.25, boredom: -0.08 },
+  stretch: { energy: 0.06, boredom: -0.08 }, yawn: { energy: 0.02, boredom: -0.02 },
+  look_around: { curiosity: -0.18, boredom: -0.10 }, hum_sway: { boredom: -0.15, energy: -0.01 },
+  check_in: { social: -0.20, boredom: -0.05 }, wave_return: { social: -0.25 },
+  corner_settle: { energy: 0.05 }, stay_still: { energy: 0.04, boredom: 0.03 },
+};
+
+function currentHour(now) {
+  if (typeof drives.hourOverride === 'number') return drives.hourOverride;
+  if (now - drives._hourAt > 30) {
+    drives._hourAt = now;
+    try { const d = new Date(); drives._hour = d.getHours() + d.getMinutes() / 60; } catch (e) { drives._hour = 12; }
+  }
+  return drives._hour;
+}
+
+// The drives: a handful of multiply-adds per frame, nothing else.
+function driveStep(P, now, dt) {
+  const D = drives, T_ = PERSONALITY.traits, R = PERSONALITY.rate, w = world;
+  dt = Math.min(dt, 0.1);
+  if (D.born < 0) D.born = now;
+  const ease = (cur, tgt, k) => cur + (tgt - cur) * Math.min(1, k * dt);
+  const focus = !!(w && w.focus && window.EVA_FOCUS_MODE !== false);
+  // energy: a daily rhythm (high mid-afternoon, low at night), spent by exertion, restored by resting
+  const day = 0.5 + 0.5 * Math.cos((currentHour(now) - 14) * Math.PI / 12);
+  D.energy = ease(D.energy, 0.15 + 0.75 * day * (0.65 + 0.35 * T_.bubbly), R.energyEase);
+  // something is going on: a new window, a moving cursor, typing
+  const newWin = !!(w && w.new && now - (w.newSeenAt || 0) < 3);
+  const busyWorld = !!w && (newWin || w.speed > 120 || w.keys >= 20);
+  if (w && w.newSeenAt && w.newSeenAt !== D.seenNew) {            // a new thing appeared: that is interesting
+    D.seenNew = w.newSeenAt; D.curiosity += 0.30 * T_.inquisitive;
+  }
+  if (busyWorld) D.boredom -= dt * R.boredomDown;
+  else D.boredom += dt * R.boredomUp * (0.5 + T_.playful);
+  const py = (P.boredom || 0) / 3;                                // Python: how long nobody needed her
+  if (D.boredom < py * 0.5) D.boredom = ease(D.boredom, py * 0.5, 0.2);
+  D.curiosity = ease(D.curiosity, 0.2 + 0.35 * T_.inquisitive + 0.3 * D.boredom, R.curiosityEase);
+  // social: grows with the time since the person spoke to her, falls fast when they do
+  const since = now - Math.max(P.spokenAt, D.born);
+  const sTarget = clamp01(since / 600) * (0.4 + 0.6 * T_.friendly);
+  D.social = ease(D.social, sTarget, sTarget < D.social ? R.socialDown : R.socialEase);
+  if (w) {                                                        // the person comes back after being away
+    if (D.prevIdle >= R.awayAfter && w.idle < 2) {
+      D.returnedAt = now; D.waved = false; D.social += 0.4;
+      if (P.nextPick !== null) P.nextPick = Math.min(P.nextPick, now + 0.8);   // greet promptly, not at the next slot
+    }
+    D.prevIdle = w.idle;
+  }
+  // focus-respect: rises quickly when the person concentrates, lets go slowly
+  const fTarget = focus ? 1 : clamp01((w ? w.keys : 0) / 240) * 0.6 * T_.respectful;
+  D.focusRespect = ease(D.focusRespect, fTarget, fTarget > D.focusRespect ? R.focusIn : R.focusOut);
+  if (!focus && D.wasFocus) P.cornerDone = false;                 // a new focus episode may settle again
+  D.wasFocus = focus;
+  D.energy = clamp01(D.energy); D.curiosity = clamp01(D.curiosity); D.boredom = clamp01(D.boredom);
+  D.social = clamp01(D.social); D.focusRespect = clamp01(D.focusRespect);
+}
+
+// ---- keeping clear: the same rule drive_guard.py enforces on the Python side ------------------
+function rectGap(a, b) {
+  const dx = Math.max(b[0] - a[2], a[0] - b[2], 0), dy = Math.max(b[1] - a[3], a[1] - b[3], 0);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+function pointGap(p, r) {
+  const dx = Math.max(r[0] - p[0], p[0] - r[2], 0), dy = Math.max(r[1] - p[1], p[1] - r[3], 0);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+// Her walk from rect eva to rect tgt: the swept rect must stay `clear` px from the cursor and the active
+// window; a walk that starts inside the zone is fine only if it leaves it and never gets nearer than it began.
+function spotClear(eva, tgt) {
+  const w = world, clear = +window.EVA_CLEAR_PX || 150;
+  const sw = [Math.min(eva[0], tgt[0]), Math.min(eva[1], tgt[1]), Math.max(eva[2], tgt[2]), Math.max(eva[3], tgt[3])];
+  const ok = (gap) => {
+    if (gap(sw) >= clear) return true;
+    const s = gap(eva), e = gap(tgt);
+    return s < clear && e >= clear && gap(sw) >= s - 1;
+  };
+  if (Array.isArray(w.cursor) && !ok((r) => pointGap(w.cursor, r))) return false;
+  const wr = w.window && w.window.rect;
+  if (Array.isArray(wr) && !ok((r) => rectGap(r, wr))) return false;
+  return true;
+}
+function spotRect(c, x) {
+  const e = c.eva, cx = Math.max(c.halfW, Math.min(c.W - c.halfW, x));
+  return [cx - c.halfW, e[1], cx + c.halfW, e[3]];
+}
+function findSpot(c, minMove) {
+  for (let i = 0; i < 8; i++) {
+    const x = rnd(c.halfW + 8, c.W - c.halfW - 8);
+    if (Math.abs(x - c.cx) < minMove) continue;
+    if (spotClear(c.eva, spotRect(c, x))) return x;
+  }
+  return null;
+}
+function cornerSpot(c) {
+  const xs = [c.halfW + 16, c.W - c.halfW - 16];
+  const cur = Array.isArray(world.cursor) ? world.cursor[0] : c.cx;
+  xs.sort((a, b) => Math.abs(b - cur) - Math.abs(a - cur));      // the corner farthest from the cursor first
+  for (const x of xs) {
+    if (Math.abs(x - c.cx) < 40) return { here: true, x: c.cx };
+    if (spotClear(c.eva, spotRect(c, x))) return { here: false, x };
+  }
+  return null;
+}
+
+// ---- the behaviours: plan(c) -> fresh parameters, or null when not possible now; score(c, pr) -> utility ----
+const _side = (c) => {              // away from the cursor when it is near her, else either way
+  const cu = Array.isArray(world.cursor) ? world.cursor[0] : null;
+  return (cu !== null && Math.abs(cu - c.cx) < 600) ? (cu > c.cx ? -1 : 1) : (Math.random() < 0.5 ? -1 : 1);
+};
+const BEHAVIOURS = {
+  wander: { kind: 'move',
+    plan: (c) => { if (c.quiet) return null; const x = findSpot(c, 0.1 * c.W);
+      return x === null ? null : { x, speed: Math.round(rnd(6, 11)), dist: Math.abs(x - c.cx) }; },
+    score: (c, pr) => (0.10 + 0.55 * drives.energy + 0.35 * drives.curiosity + 0.35 * drives.boredom
+                       + (c.crowded ? 0.9 : 0) + (c.sitting ? 0.3 * drives.energy : 0)) * (0.6 + 0.4 * PERSONALITY.traits.playful),
+    dur: (pr) => pr.dist / (pr.speed / 16 * 1000) * 1.15 + 0.8 },
+  sit: { kind: 'move',
+    plan: (c) => (c.quiet || c.sitting) ? null : { dwell: rnd(8, 16) },
+    score: () => Math.max(0.05, 0.1 + 1.1 * (1 - drives.energy) + 0.2 * drives.boredom - 0.3 * drives.curiosity),
+    dur: (pr) => pr.dwell },
+  lean: { kind: 'pose',
+    plan: (c) => c.quiet ? null : { side: _side(c), amp: rnd(0.05, 0.11), tilt: rnd(0.04, 0.10), forward: rnd(0, 0.05),
+                                    dur: rnd(3, 6.5), rise: rnd(0.6, 1.1), fall: rnd(0.7, 1.2) },
+    score: () => 0.3 + 0.3 * (1 - drives.energy) + 0.2 * drives.boredom,
+    dur: (pr) => pr.dur },
+  peek: { kind: 'pose',
+    plan: (c) => {
+      const wr = c.win; if (c.quiet || !Array.isArray(wr)) return null;
+      const left = (wr[0] + wr[2]) / 2 < c.cx;                    // the window is on her left (screen) or right
+      const cu = Array.isArray(world.cursor) ? world.cursor[0] : null;
+      if (cu !== null && Math.abs(cu - c.cx) < 600 && (cu < c.cx) === left) return null;   // never toward the cursor
+      const edgeX = left ? wr[2] : wr[0];
+      const g = aimPoint(presence, edgeX, (wr[1] + wr[3]) / 2);
+      return { side: left ? -1 : 1, amp: rnd(0.05, 0.10), dur: rnd(2.5, 5), rise: rnd(0.6, 1.0), fall: rnd(0.7, 1.1),
+               gaze: { yaw: g.yaw, pitch: g.pitch * 0.5, share: 0.5 } }; },
+    score: () => 0.1 + 1.0 * drives.curiosity * (0.5 + 0.5 * PERSONALITY.traits.inquisitive) + 0.2 * drives.boredom,
+    dur: (pr) => pr.dur },
+  stretch: { kind: 'gesture',
+    plan: (c) => c.quiet ? null : { delay: rnd(0, 0.8), tilt: (Math.random() - 0.5) * 0.1 },
+    score: () => 0.12 + 0.7 * (1 - drives.energy) + 0.35 * drives.boredom },
+  yawn: { kind: 'gesture',
+    plan: (c) => c.quiet ? null : { delay: rnd(0, 0.6), tilt: (Math.random() - 0.5) * 0.1 },
+    score: () => 0.03 + 3.4 * Math.max(0, 0.5 - drives.energy) + 0.1 * drives.boredom },
+  look_around: { kind: 'gesture',
+    plan: (c) => c.quiet ? null : { delay: rnd(0, 0.8), tilt: (Math.random() - 0.5) * 0.16 },
+    score: () => 0.2 + 0.8 * drives.curiosity + 0.25 * drives.boredom },
+  hum_sway: { kind: 'gesture',
+    plan: (c) => c.quiet ? null : { delay: rnd(0, 0.8), swayY: rnd(0.02, 0.07), f: rnd(0.7, 1.4), tilt: (Math.random() - 0.5) * 0.1 },
+    score: () => 0.08 + 0.9 * Math.max(0, drives.energy - 0.35) * PERSONALITY.traits.bubbly
+                 + 0.35 * drives.boredom * PERSONALITY.traits.playful },
+  wave_return: { kind: 'gesture',
+    plan: (c) => (c.quiet || drives.waved || c.now - drives.returnedAt > 12) ? null : { delay: rnd(0.2, 0.9), tilt: rnd(-0.05, 0.05) },
+    score: () => 6 },
+  check_in: { kind: 'pose',
+    plan: (c) => c.quiet ? null : { side: Math.random() < 0.5 ? -1 : 1, tilt: rnd(0.05, 0.12), smile: rnd(0.35, 0.65),
+                                    dur: rnd(2, 4), rise: rnd(0.5, 0.9), fall: rnd(0.6, 1.0),
+                                    gaze: { yaw: 0, pitch: 0, share: 0.5 } },
+    score: () => 0.05 + 1.1 * drives.social * PERSONALITY.traits.friendly,
+    dur: (pr) => pr.dur },
+  corner_settle: { kind: 'move', still: true,
+    plan: (c) => { if (!c.focus || c.P.cornerDone) return null; const s = cornerSpot(c);
+      return s === null ? null : { x: s.x, here: s.here, speed: 6, dist: Math.abs(s.x - c.cx) }; },
+    score: () => 10,
+    dur: (pr) => pr.here ? 0.1 : pr.dist / (pr.speed / 16 * 1000) * 1.15 + 0.8 },
+  stay_still: { kind: 'pose', still: true,
+    plan: (c) => ({ dur: rnd(5, 12), rise: 0.6, fall: 0.6 }),
+    score: (c) => 0.45 + 1.3 * drives.focusRespect + 0.5 * (1 - drives.energy) * PERSONALITY.traits.respectful + (c.focus ? 2 : 0),
+    dur: (pr) => pr.dur },
+};
+const behEnv = (B, now) => smooth((now - B.start) / (B.pr.rise || 0.5)) * smooth((B.end - now) / (B.pr.fall || 0.6));
+
+function startBehaviour(P, name, pr, now) {
+  const def = BEHAVIOURS[name];
+  const id = ++P.driveSeq;
+  let end;
+  if (def.kind === 'gesture') end = now + pr.delay + PROC[GESTURE_OF[name]].dur + 0.3;
+  else end = now + def.dur(pr);
+  const B = { id, name, kind: def.kind, still: !!def.still, start: now, end, pr, played: false, intentId: 0 };
+  P.beh = B;
+  P.hist.push(name);
+  const n = P.hist.length;
+  if (n >= 3) {
+    P.tripleLog.push(P.hist[n - 3] + '>' + P.hist[n - 2] + '>' + P.hist[n - 1]);
+    if (P.tripleLog.length > PERSONALITY.novelty) P.tripleLog.shift();
+  }
+  P.behLog.push({ name, at: now, id, pr }); if (P.behLog.length > 800) P.behLog.shift();
+  if (name === 'wander') { P.intents.push({ id, kind: 'wander', x: Math.round(pr.x), speed: pr.speed }); B.intentId = id; }
+  else if (name === 'corner_settle') {
+    P.cornerDone = true;
+    if (!pr.here) { P.intents.push({ id, kind: 'corner', x: Math.round(pr.x), speed: pr.speed }); B.intentId = id; }
+  } else if (name === 'sit') { P.intents.push({ id, kind: 'sit' }); B.intentId = id; }
+  if (name === 'wave_return') drives.waved = true;
+  return B;
+}
+function endBehaviour(P, now, B, ok) {
+  P.beh = null;
+  P.nextPick = now + rnd(PERSONALITY.gap[0], PERSONALITY.gap[1]);
+  if (ok) {
+    const fx = DRIVE_EFFECT[B.name] || {};
+    for (const k in fx) drives[k] = clamp01(drives[k] + fx[k]);
+    return;
+  }
+  // it did not happen (refused, or no body for it): forget it, and do not try it again for a while
+  const i = P.behLog.findIndex((e) => e.id === B.id);
+  if (i >= 0) P.behLog[i].failed = true;
+  if (P.hist[P.hist.length - 1] === B.name) { P.hist.pop(); if (P.hist.length >= 2) P.tripleLog.pop(); }
+  P.cool[B.name] = now + 25;
+  P.nextPick = now + 1;
+}
+// Python's answer to an intent: if she may not, the behaviour ends at once
+window.driveResult = function (r) {
+  try {
+    const P = presence, B = P.beh;
+    if (r && B && B.intentId && B.intentId === r.id && !r.ok) endBehaviour(P, performance.now() / 1000, B, false);
+  } catch (e) { /* the answer is advisory */ }
+};
+window.takeDriveIntents = function () {
+  const q = presence.intents;
+  if (!q.length) return '';
+  presence.intents = [];
+  return JSON.stringify(q);
+};
+
+function utilityStep(P, now, dt, idleLike) {
+  if (!world || window.EVA_DRIVES === false) return;
+  const D = drives, w = world, B = P.beh;
+  const focus = !!(w.focus && window.EVA_FOCUS_MODE !== false);
+  if (B) {
+    if (B.kind === 'gesture' && !B.played && now >= B.start + B.pr.delay) {
+      if (playProcedural(GESTURE_OF[B.name])) { B.played = true; B.playedAt = now; } else { endBehaviour(P, now, B, false); return; }
+    }
+    // a posture behaviour yields (eases out) when she gets busy, or when the person starts to concentrate
+    if (B.kind === 'pose' && !B.still && ((focus || !idleLike) && B.end > now + (B.pr.fall || 0.6))) B.end = now + (B.pr.fall || 0.6);
+    if (now >= B.end) endBehaviour(P, now, B, true);
+    return;
+  }
+  if (P.nextPick === null) { P.nextPick = now + rnd(PERSONALITY.gap[0], PERSONALITY.gap[1]); return; }
+  if (now < P.nextPick) return;
+  if (!idleLike || activity !== 'idle' || bodyState.held || walkW > 0.05) { P.nextPick = now + 0.6; return; }
+  if (typeof dance !== 'undefined' && dance.w > 0.2) { P.nextPick = now + 1; return; }   // dancing to music: no other whims
+  const eva = Array.isArray(w.eva) ? w.eva : null;
+  if (!eva) { P.nextPick = now + 1; return; }
+  const screen = (Array.isArray(w.screen) && w.screen.length >= 2) ? w.screen : [1920, 1080];
+  const clear = +window.EVA_CLEAR_PX || 150;
+  const c = { P, now, focus, quiet: focus || D.focusRespect > 0.75, sitting: !!bodyState.sitting, eva,
+              W: screen[0], H: screen[1], halfW: Math.max(1, (eva[2] - eva[0]) / 2), cx: (eva[0] + eva[2]) / 2,
+              win: w.window && Array.isArray(w.window.rect) ? w.window.rect : null };
+  c.crowded = (Array.isArray(w.cursor) && pointGap(w.cursor, eva) < clear) || (!!c.win && rectGap(eva, c.win) < clear);
+  const calm = 1 - 0.8 * D.focusRespect;
+  const last = P.hist.length ? P.hist[P.hist.length - 1] : '', last2 = P.hist.length > 1 ? P.hist[P.hist.length - 2] : '';
+  const cands = [];
+  for (const name in BEHAVIOURS) {
+    if ((P.cool[name] || 0) > now) continue;
+    const def = BEHAVIOURS[name];
+    const pr = def.plan(c);
+    if (!pr) continue;
+    let s = def.score(c, pr) * (PERSONALITY.weight[name] || 1) * (def.still ? 1 : calm);
+    if (name === last) s *= PERSONALITY.repeatPenalty;
+    cands.push({ name, pr, s, seen: last2 !== '' && P.tripleLog.indexOf(last2 + '>' + last + '>' + name) >= 0 });
+  }
+  if (!cands.length) { P.nextPick = now + 1; return; }
+  // a greeting is not a whim: when the person has just come back she waves, whatever the dice or novelty say
+  const greet = cands.find((x) => x.name === 'wave_return');
+  if (greet && !D.waved && now - D.returnedAt < 15) { startBehaviour(P, greet.name, greet.pr, now); return; }
+  const fresh = cands.filter((x) => !x.seen);           // no behaviour triple repeats while another is possible
+  const pool = fresh.length ? fresh : cands;
+  const T_ = PERSONALITY.temperature;
+  let top = -1e9; for (const x of pool) top = Math.max(top, x.s);
+  let sum = 0; for (const x of pool) { x.p = Math.exp((x.s - top) / T_); sum += x.p; }
+  let r = Math.random() * sum, pick = pool[pool.length - 1];
+  for (const x of pool) { r -= x.p; if (r <= 0) { pick = x; break; } }
+  startBehaviour(P, pick.name, pick.pr, now);
+}
+
+// Posture of the behaviours that are only her body (no clip): eased in and out, so nothing ever snaps.
+function behaviourPose(P, o, now) {
+  const B = P.beh;
+  if (!B || B.kind === 'move' || B.still) return;
+  const env = behEnv(B, now), pr = B.pr;
+  if (B.name === 'lean') {
+    o.spineZ += pr.side * pr.amp * env; o.headZ += pr.side * pr.tilt * env; o.spineX += pr.forward * env;
+  } else if (B.name === 'peek') {
+    o.spineZ += pr.side * pr.amp * env; o.spineX += 0.06 * env; o.headZ += pr.side * 0.12 * env;
+  } else if (B.name === 'check_in') {
+    o.headZ += pr.side * pr.tilt * env; P.smile = Math.max(P.smile, pr.smile * env);
+  } else {                                      // a gesture runs its own motion; this is the personal touch on it
+    const pw = B.played ? smooth((now - B.playedAt) / 0.5) : 0;
+    o.headZ += (pr.tilt || 0) * env * pw;
+    if (B.name === 'hum_sway') o.spineY += pr.swayY * Math.sin(now * pr.f * 2 * Math.PI) * env * pw;
+  }
+}
+// where a behaviour wants her to look (only used when nothing more salient has her attention)
+function driveGaze(P, now) {
+  const B = P.beh;
+  if (!B || !B.pr.gaze || B.still) return null;
+  return { yaw: B.pr.gaze.yaw, pitch: B.pr.gaze.pitch, share: B.pr.gaze.share, env: behEnv(B, now) };
+}
+
 const _origSetExpression = window.setExpression;
 window.setExpression = function (name, weight) {
   presence.externalExpr = !!(name && weight > 0);
@@ -917,16 +1253,19 @@ function presenceStep(frame, t, dt, idleLike) {
     const o = frame.o, now = performance.now() / 1000, P = presence;
     try { affectStep(o, frame, t, dt, idleLike, now); } catch (e) { /* a feeling never breaks the frame */ }
     attentionStep(P, now, dt);
+    try { driveStep(P, now, dt); utilityStep(P, now, dt, idleLike); }
+    catch (e) { window.EVA_DRIVES = false; console.warn('drives disabled after an error:', e); }
     // -- what the eyes want ----------------------------------------------------------
     let wantYaw = 0, wantPitch = 0, headShare = 0, torsoShare = 0;
     const a = P.attn;
     const attending = a && (a.hover || now - a.at < 2.2);
     const aim = P.aim;
+    let usedCursor = false;
     const cursorSal = (P.cand && P.cand.cursor) || 0;
     if (attending && !P.focus &&
         (a.hover || !aim || cursorSal > aim.salience * 1.15 + 0.05 || a.at > aim.since)) {
       // the cursor keeps precedence while it is hovering or more salient than the aim
-      wantYaw = a.dx * 32; wantPitch = -a.dy * 20; headShare = a.hover ? 0.45 : 0.35;
+      wantYaw = a.dx * 32; wantPitch = -a.dy * 20; headShare = a.hover ? 0.45 : 0.35; usedCursor = true;
     } else if (aim) {
       wantYaw = aim.yaw; wantPitch = aim.pitch;
       headShare = aim.kind === 'cursor' ? 0.35
@@ -942,6 +1281,11 @@ function presenceStep(frame, t, dt, idleLike) {
         P.glance = { yaw: side * (14 + Math.random() * 14), pitch: -4 - Math.random() * 8, until: now + 0.7 + Math.random() * 0.9 };
         P.nextGlance = now + (9 + Math.random() * 14) * (1.4 - 0.8 * affect.e);   // livelier when she has energy
       }
+    }
+    // Phase 2: a behaviour (peek, check-in) may steer the gaze, but only when nothing else holds her attention
+    const dg = (!P.focus && !usedCursor && (!aim || aim.salience < 0.2)) ? driveGaze(P, now) : null;
+    if (dg && dg.env > 0.001) {
+      wantYaw = dg.yaw * dg.env; wantPitch = dg.pitch * dg.env; headShare = Math.max(headShare, dg.share * dg.env);
     }
     if (P.focus) { headShare = 0.12; torsoShare = 0.03; }
     else { torsoShare = headShare * 0.35; }
@@ -988,7 +1332,7 @@ function presenceStep(frame, t, dt, idleLike) {
       P.shift += (P.shiftTarget - P.shift) * Math.min(1, dt * 1.2);
       frame.hipShift = 0.012 * P.shift;
       o.spineZ += -0.025 * P.shift; o.headZ += 0.015 * P.shift;
-      if (P.boredom > 0 && !P.fidget && now > P.nextFidget) {
+      if (P.boredom > 0 && !P.fidget && !P.beh && now > P.nextFidget) {
         const pool = P.boredom === 1 ? ['finger_tap', 'look_hands', 'hands_behind', 'foot_tap']
                    : ['finger_tap', 'foot_tap', 'heel_bounce', 'rock', 'hands_behind', 'swing_arms', 'look_hands', 'swing_arms'];
         const name = pool[Math.floor(Math.random() * pool.length)];
@@ -1008,6 +1352,7 @@ function presenceStep(frame, t, dt, idleLike) {
     // music: she dances to the beat (Phase 4; a fault here only switches the dance off)
     try { danceStep(frame, o, t, dt, now, idleLike, P); }
     catch (e) { dance.w = 0; window.EVA_MUSIC_DANCE = false; console.warn('dance disabled after an error:', e); }
+    if (P.beh) behaviourPose(P, o, now);   // eased by its own envelope, so it never snaps on or off
   } catch (e) {
     window.EVA_PRESENCE = false;
     console.warn('presence layer disabled after an error:', e);
