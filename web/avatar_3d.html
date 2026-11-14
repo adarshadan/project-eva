@@ -1047,7 +1047,8 @@ function restPose() {
 // ---- activities: what she is DOING (deltas from rest, plus gentle life) ------
 // Hands are where the work is: in front of her for reading, writing and typing,
 // at the chin for thinking, sweeping for organising, open for presenting.
-const breathe = (t) => ({ chestX: Math.sin(t * 1.3 + 1) * 0.015, spineZ: Math.sin(t * 1.3) * 0.015 });
+const breathe = (t) => window.EVA_BODY_LIFE !== false ? {}       // Phase 3: bodyLifeApply breathes, scaled by her energy
+  : ({ chestX: Math.sin(t * 1.3 + 1) * 0.015, spineZ: Math.sin(t * 1.3) * 0.015 });
 const hold = (t, k) => ({                    // both forearms forward, hands near the midline
   luaX: 0.30 * k, ruaX: 0.30 * k, llaY: -1.35 * k, rlaY: 1.35 * k,
   luaY: -0.30 * k, ruaY: 0.30 * k, luaZ: 0.10 * k, ruaZ: -0.10 * k });
@@ -1291,6 +1292,8 @@ window.setLocomotion = function (moving, direction, speedPx, heightPx) {
   // about 0.8 of her height on screen, so the cycle runs at the speed her window actually moves.
   walkRate = (moving && speedPx > 0 && heightPx > 0)
     ? Math.max(4, Math.min(16, 2 * Math.PI * speedPx / (0.8 * heightPx))) : 0;
+  // Phase 3: her ground speed in m/s along the screen (she is ~1.6 m tall), so hair and skirt feel the walk
+  bl.locoVx = (moving && speedPx > 0 && heightPx > 0) ? Math.max(-1, Math.min(1, direction || 0)) * 1.6 * speedPx / heightPx : 0;
 };
 // 60 fps while her window moves (walk, glide) so the body and the window move in step; 0 = configured rate.
 let renderFps = 0;
@@ -1307,6 +1310,236 @@ window.setBodyState = function (st) {
   if (!st || typeof st !== 'object') return;
   for (const k of ['held', 'airborne', 'sitting']) if (k in st) bodyState[k] = !!st[k];
 };
+
+// ---- Phase 3: a body that moves like a person (EVA_BODY_LIFE, EVA_CLOTH_PHYSICS) -------------------
+// Runs on the FINAL channels (after the controller and the presence layer), first thing in writePose:
+//   followers    head, chest and spine pass through slightly underdamped second-order followers (head
+//                fastest, spine slowest): the head leads, the torso follows behind, and every sizeable move
+//                ends in a small overshoot that settles. A causal anticipation (a small wind-up the other way)
+//                fires when a channel starts a sizeable move from calm. Walking starts with a lean back and
+//                stops with a lean forward that settles.
+//   echo         the head's recent motion (fast minus slow low-pass) lags into the spine and chest.
+//   breathing    phase-integrated, inhale quicker than exhale; rate and depth rise with her energy.
+//   noise        stateless 1-D Perlin noise (a hash of the lattice index: nothing stored, never repeats).
+//   weight       standing: hips sideways, pelvic roll, spine counter-roll, thighs counter-rotated so the feet
+//                stay planted, the unloaded knee softens. Walking: lateral sway and pelvic yaw on the stride.
+//   cloth        clothStep(): the model's own spring bones (hair, skirt, coat) get her walk's inertia and a
+//                light breeze; without spring bones, spring-dampers on hair/skirt bones.
+// With window.EVA_BODY_LIFE === false none of this runs and the arithmetic is the old one.
+window.EVA_BODY_LIFE = true;
+window.EVA_CLOTH_PHYSICS = true;
+function bodyLifeOn() { return window.EVA_BODY_LIFE !== false; }
+function clothOn() { return window.EVA_CLOTH_PHYSICS !== false; }
+
+function _blHash(i, seed) {
+  let h = (Math.imul(i, 374761393) + Math.imul(seed | 0, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967295 * 2 - 1;
+}
+function pnoise(x, seed) {                       // 1-D gradient (Perlin) noise, about -1..1, smooth
+  const i = Math.floor(x), f = x - i;
+  const u = f * f * f * (f * (f * 6 - 15) + 10);
+  const a = _blHash(i, seed) * f, b = _blHash(i + 1, seed) * (f - 1);
+  return (a + (b - a) * u) * 2;
+}
+function bnoise(x, seed) { return 0.65 * pnoise(x, seed) + 0.35 * pnoise(x * 2.37 + 11.7, seed + 1); }
+
+const BL_FOLLOW = {                              // channel: [omega rad/s, zeta]
+  headX: [18, 0.66], headY: [18, 0.66], headZ: [18, 0.66],
+  chestX: [13, 0.70], spineX: [12, 0.72], spineY: [12, 0.72], spineZ: [12, 0.72] };
+const BL_NOISE = [                               // channel, amplitude (rad), frequency (Hz)
+  ['spineX', 0.012, 0.19], ['spineY', 0.018, 0.13], ['spineZ', 0.012, 0.17], ['chestX', 0.007, 0.23],
+  ['headX', 0.014, 0.29], ['headY', 0.022, 0.21], ['headZ', 0.014, 0.25], ['luaZ', 0.012, 0.16], ['ruaZ', 0.012, 0.18]];
+const bl = { seed: (Math.random() * 1e6) | 0, init: false, fol: {}, breath: 0, shift: 0, shiftV: 0, shiftTarget: 0,
+             side: 1, nextShift: 0, walk: false, walkPrev: 0, e1: [0, 0, 0], e2: [0, 0, 0], echoOk: false,
+             locoVx: 0, facingV: 0, facingTarget: 0, faceAnt: 0, faceFrom: 0, faceDir: 0,
+             L: { hipX: 0, hipRoll: 0, hipYaw: 0, hipDrop: 0, legZ: 0, thighL: 0, thighR: 0, kneeL: 0, kneeR: 0,
+                  footL: 0, footR: 0 } };
+
+// A rounded triangle wave instead of a sine: the stance foot sweeps back at nearly constant speed (a planted
+// foot, not a sliding one) and the swing is quicker. Same range as sin.
+const _PLANT_K = 0.95, _PLANT_N = Math.asin(0.95);
+function stridePlant(ph) { return Math.asin(_PLANT_K * Math.sin(ph)) / _PLANT_N; }
+
+function _blFollow(ch, x, dt) {
+  const w0 = BL_FOLLOW[ch][0], z = BL_FOLLOW[ch][1];
+  let s = bl.fol[ch];
+  if (!s) { bl.fol[ch] = { y: x, v: 0, xp: x, armed: true, calm: 0, cool: 0 }; return x; }
+  const xd = (x - s.xp) / dt, a = Math.abs(xd);
+  s.xp = x;
+  if (s.cool > 0) s.cool -= dt;
+  if (a < 0.12) { s.calm += dt; if (s.calm > 0.2) s.armed = true; } else s.calm = 0;
+  if (s.armed && s.cool <= 0 && a > 0.5) {       // a sizeable move begins: a small wind-up the other way first
+    s.v -= Math.sign(xd) * Math.min(3.0, 1.2 + 2.0 * a);
+    s.armed = false; s.cool = 0.7;
+  }
+  const n = Math.max(1, Math.ceil(dt / 0.017)), h = dt / n;
+  for (let i = 0; i < n; i++) { s.v += (w0 * w0 * (x - s.y) - 2 * z * w0 * s.v) * h; s.y += s.v * h; }
+  return s.y;
+}
+function _blKick(ch, v) { const s = bl.fol[ch]; if (s) s.v += v; }
+
+function _bodyLife(frame, now) {
+  const o = frame.o, t = frame.t || 0;
+  const dt = Math.min(0.1, Math.max(0.001, frame.dt || 1 / 30));
+  const e = affect.e, focus = !!presence.focus, wW = frame.walkW || 0;
+  if (!bl.init) { bl.init = true; bl.nextShift = t + 2 + Math.random() * 3; }
+  // walk start and stop: lean back first / lean forward and settle
+  if (!bl.walk && wW > 0.1 && wW > bl.walkPrev) { bl.walk = true; _blKick('spineX', -0.8); _blKick('chestX', -0.35); }
+  else if (bl.walk && wW < 0.9 && wW < bl.walkPrev) { bl.walk = false; _blKick('spineX', 0.7); _blKick('headX', 0.35); }
+  bl.walkPrev = wW;
+  // followers: head leads, chest and spine follow; overshoot and anticipation
+  for (const ch in BL_FOLLOW) o[ch] = _blFollow(ch, o[ch] || 0, dt);
+  // echo of the head's motion into the torso (transient: fast minus slow low-pass, so no static lean)
+  const hv = [o.headX, o.headY, o.headZ], k1 = 1 - Math.exp(-dt / 0.12), k2 = 1 - Math.exp(-dt / 0.3);
+  if (!bl.echoOk) { bl.echoOk = true; for (let i = 0; i < 3; i++) { bl.e1[i] = hv[i]; bl.e2[i] = hv[i]; } }
+  for (let i = 0; i < 3; i++) { bl.e1[i] += (hv[i] - bl.e1[i]) * k1; bl.e2[i] += (hv[i] - bl.e2[i]) * k2; }
+  const lim = (v) => 0.12 * Math.tanh(v / 0.12);                       // a big head move cannot throw the torso about
+  const exx = lim(bl.e1[0] - bl.e2[0]), eyy = lim(bl.e1[1] - bl.e2[1]), ezz = lim(bl.e1[2] - bl.e2[2]);
+  o.spineX += 0.15 * exx; o.chestX += 0.20 * exx; o.spineY += 0.20 * eyy; o.spineZ += 0.15 * ezz;
+  // breathing: faster and deeper with energy, inhale quicker than exhale, chest and shoulders
+  const rate = 0.19 + 0.20 * e;
+  bl.breath = (bl.breath + dt * rate * (1 + 0.1 * pnoise(t * 0.2, bl.seed + 5))) % 1;
+  const u = bl.breath, u2 = u < 0.4 ? 0.5 * (u / 0.4) : 0.5 + 0.5 * ((u - 0.4) / 0.6);
+  const bw = -0.5 * Math.cos(2 * Math.PI * u2);                     // -0.5 .. 0.5, zero mean
+  const depth = (0.7 + 0.6 * e) * (1 + 0.3 * pnoise(t * 0.09, bl.seed + 6)) * (focus ? 0.8 : 1);
+  o.chestX -= 0.030 * depth * bw; o.spineX -= 0.006 * depth * bw;
+  frame.shoulders = (frame.shoulders || 0) + 0.05 * depth * bw;
+  // never perfectly still: smooth noise, calmer when walking or in focus mode
+  const nk = (0.5 + 0.5 * e) * (1 - 0.7 * clamp01(wW * 1.2)) * (focus ? 0.4 : 1);
+  for (let i = 0; i < BL_NOISE.length; i++) {
+    const n = BL_NOISE[i];
+    o[n[0]] = (o[n[0]] || 0) + n[1] * nk * bnoise(t * n[2], bl.seed + i * 131);
+  }
+  // weight shifts between the feet when she is just standing
+  const stand = (1 - Math.min(1, wW * 1.6)) * (1 - Math.min(1, (frame.sitW || 0) * 2)) * (1 - Math.min(1, (frame.heldW || 0) * 2))
+              * (1 - Math.min(1, (frame.airW || 0) * 2)) * (1 - Math.min(1, (frame.squat || 0) * 2));
+  if (t >= bl.nextShift) {
+    if (Math.random() < 0.3) bl.shiftTarget = 0;
+    else { bl.side = -bl.side; bl.shiftTarget = bl.side * (0.55 + 0.45 * Math.random()); }
+    bl.nextShift = t + 4 + Math.random() * 5.5;
+  }
+  const sw0 = 3.0, sz = 0.6;                                          // underdamped: a little overshoot, then rest
+  bl.shiftV += (sw0 * sw0 * (bl.shiftTarget - bl.shift) - 2 * sz * sw0 * bl.shiftV) * dt;
+  bl.shift += bl.shiftV * dt;
+  const L = frame.bl = bl.L;
+  L.hipX = L.hipRoll = L.hipYaw = L.hipDrop = L.legZ = L.thighL = L.thighR = L.kneeL = L.kneeR = L.footL = L.footR = 0;
+  const s = bl.shift * stand * (focus ? 0.3 : 1);
+  L.hipX = 0.013 * s;                                                  // hips over the loaded foot
+  L.hipRoll = 0.03 * s;                                                // the loaded side's hip rises
+  L.legZ = -L.hipX / 0.8 - L.hipRoll;                                  // thighs counter-rotate: the feet stay where they are
+  L.hipDrop = -0.004 * Math.abs(s);
+  o.spineZ -= L.hipRoll;                                               // shoulders stay level over the tilted pelvis
+  const uR = Math.max(0, s), uL = Math.max(0, -s);                     // the unloaded leg softens at the knee
+  L.kneeR = -0.08 * uR; L.thighR = 0.04 * uR; L.footR = 0.04 * uR;
+  L.kneeL = -0.08 * uL; L.thighL = 0.04 * uL; L.footL = 0.04 * uL;
+  // walking: the hips sway over the stance foot, the pelvis turns with the leading leg, the shoulders counter-turn
+  if (wW > 0.001) {
+    const c = -Math.cos(walkPhase) * wW, sn = Math.sin(walkPhase) * wW;
+    L.hipX += 0.016 * c; L.hipRoll += 0.04 * c; L.hipYaw = -0.07 * sn; L.legZ += -0.02 * c;
+    o.spineY += 0.10 * sn; o.spineZ -= 0.032 * c;
+  }
+}
+function bodyLifeApply(frame, now) {
+  if (!bodyLifeOn()) { frame.bl = null; if (bl.echoOk) { bl.fol = {}; bl.echoOk = false; } return; }
+  try { _bodyLife(frame, now); }
+  catch (err) { window.EVA_BODY_LIFE = false; frame.bl = null; console.warn('body life layer disabled after an error:', err && err.message); }
+}
+
+// Turning to face where she walks: a lightly underdamped spring with a tiny counter-turn first, in place of the
+// plain exponential (which moved fastest in its first frame and stopped dead).
+function faceStep(face, target, dt) {
+  if (!bodyLifeOn()) return face + (target - face) * Math.min(1, dt * 4);
+  if (Math.abs(target - bl.facingTarget) > 0.2) {          // a real change of heading: a 0.12 s wind-up the other way first
+    bl.faceAnt = 0.12; bl.faceFrom = face; bl.faceDir = -Math.sign(target - bl.facingTarget);
+  }
+  bl.facingTarget = target;
+  let goal = target;
+  if (bl.faceAnt > 0) { bl.faceAnt -= dt; goal = bl.faceFrom + bl.faceDir * 0.05; }
+  const w0 = 6, z = 0.62, n = Math.max(1, Math.ceil(dt / 0.017)), h = dt / n;
+  for (let i = 0; i < n; i++) { bl.facingV += (w0 * w0 * (goal - face) - 2 * z * w0 * bl.facingV) * h; face += bl.facingV * h; }
+  return face;
+}
+
+// ---- hair and clothes ----------------------------------------------------------------------------
+// The VRM has spring bones and three-vrm's vrm.update(dt) already simulates them; but Eva never moves through
+// the page's world (the Qt window moves, not the avatar), so a walk gave the hair no inertia and nothing blew.
+// Each frame, before vrm.update: every joint's gravity = its own gravity + an external force made of her walk's
+// inertia, drag, and a light breeze. Skirt and coat take less; the bust takes none. Originals are saved and restored.
+const cloth = { init: false, joints: [], fallback: [], vx: 0, ax: 0, applied: false };
+function _num(v, d) { return (typeof v === 'number' && isFinite(v)) ? v : d; }
+function clothInit(vrm) {
+  cloth.init = true;
+  const mgr = vrm.springBoneManager;
+  const joints = (mgr && mgr.joints) ? Array.from(mgr.joints) : [];
+  for (const j of joints) {
+    const st = j.settings;
+    if (!st || !st.gravityDir) continue;
+    const name = (j.bone && j.bone.name) || '';
+    if (/bust|breast/i.test(name)) continue;
+    cloth.joints.push({ j, gain: /skirt|coat|tops|sleeve/i.test(name) ? 0.55 : 1.0,
+                        dx: st.gravityDir.x, dy: st.gravityDir.y, dz: st.gravityDir.z, pow: st.gravityPower || 0,
+                        stiff: st.stiffness, drag: st.dragForce });
+  }
+  if (!cloth.joints.length && vrm.scene && vrm.scene.traverse) {       // a model without spring bones
+    vrm.scene.traverse((n) => {
+      const nm = n.name || '';
+      if (n.isBone && /hair|skirt|ribbon|tail|cape|coat|sleeve/i.test(nm) && !/bust|breast/i.test(nm))
+        cloth.fallback.push({ n, bx: n.rotation.x, bz: n.rotation.z, x: 0, vx: 0, z: 0, vz: 0,
+                              w0: 7 + 4 * Math.abs(_blHash(cloth.fallback.length, 77)), gain: /skirt|coat|cape/i.test(nm) ? 0.55 : 1 });
+    });
+  }
+}
+function clothRestore() {
+  cloth.applied = false;
+  for (const r of cloth.joints) {
+    const st = r.j.settings;
+    st.gravityDir.set(r.dx, r.dy, r.dz); st.gravityPower = r.pow; st.stiffness = r.stiff; st.dragForce = r.drag;
+  }
+  for (const f of cloth.fallback) { f.n.rotation.x = f.bx; f.n.rotation.z = f.bz; f.x = f.vx = f.z = f.vz = 0; }
+}
+function clothStep(dt, t) {
+  const vrm = vrmInstance;
+  if (!vrm) return;
+  if (!clothOn()) { if (cloth.applied) clothRestore(); return; }
+  if (!cloth.init) clothInit(vrm);
+  const tune = window.EVA_CLOTH_TUNE || {};
+  const sk = _num(tune.stiffness, 1), dk = _num(tune.drag, 1), bk = _num(tune.breeze, 1);
+  dt = Math.min(0.1, Math.max(0.001, dt));
+  // her own motion along the screen: inertia (lags behind when she speeds up, swings on when she stops) and drag
+  const pv = cloth.vx;
+  cloth.vx += (bl.locoVx - cloth.vx) * Math.min(1, dt / 0.15);
+  const ax = Math.max(-8, Math.min(8, (cloth.vx - pv) / dt));
+  cloth.ax += (ax - cloth.ax) * Math.min(1, dt / 0.06);
+  let rx = 1, ry = 0, rz = 0;                                          // screen-right in world space
+  if (typeof camera !== 'undefined' && camera && camera.matrixWorld) {
+    const m = camera.matrixWorld.elements; rx = m[0]; ry = m[1]; rz = m[2];
+  }
+  const inert = -0.4 * cloth.ax - 0.3 * cloth.vx;                      // m/s^2
+  // a light breeze: slow gusts from a slowly turning direction
+  const g = 0.5 + 0.5 * pnoise(t * 0.08, bl.seed + 21), mag = bk * (0.10 + 0.40 * g * g);
+  const bx = mag * pnoise(t * 0.11 + 5, bl.seed + 22), bz = 0.6 * mag * pnoise(t * 0.09 + 17, bl.seed + 23),
+        by = 0.15 * mag * pnoise(t * 0.17 + 31, bl.seed + 24);
+  const cl = (v) => Math.max(-3, Math.min(3, v));
+  const fx = cl(inert * rx + bx), fy = cl(inert * ry + by), fz = cl(inert * rz + bz);
+  cloth.applied = true;
+  for (const r of cloth.joints) {
+    const st = r.j.settings, k = r.gain;
+    const vx = r.dx * r.pow + fx * k, vy = r.dy * r.pow + fy * k, vz = r.dz * r.pow + fz * k;
+    const len = Math.sqrt(vx * vx + vy * vy + vz * vz);
+    if (len > 1e-5) { st.gravityDir.set(vx / len, vy / len, vz / len); st.gravityPower = Math.min(len, 5); }
+    st.stiffness = r.stiff * sk; st.dragForce = Math.min(1, r.drag * dk);
+  }
+  for (const f of cloth.fallback) {                                    // no spring bones: spring-dampers (best effort)
+    const tz = -fx * 0.06 * f.gain, tx = fz * 0.04 * f.gain, n = Math.max(1, Math.ceil(dt / 0.02)), h = dt / n;
+    for (let i = 0; i < n; i++) {
+      f.vz += (f.w0 * f.w0 * (tz - f.z) - 2 * 0.35 * f.w0 * f.vz) * h; f.z += f.vz * h;
+      f.vx += (f.w0 * f.w0 * (tx - f.x) - 2 * 0.35 * f.w0 * f.vx) * h; f.x += f.vx * h;
+    }
+    f.n.rotation.x = f.bx + Math.max(-0.3, Math.min(0.3, f.x)); f.n.rotation.z = f.bz + Math.max(-0.3, Math.min(0.3, f.z));
+  }
+}
 
 // ---- the controller ------------------------------------------------------------
 const poseController = {
@@ -1386,7 +1619,7 @@ const poseController = {
     // walk: arms relax toward rest and swing, legs stride, body bobs
     walkW += ((currentAnim === 'walk' ? 1 : 0) - walkW) * Math.min(1, dt * 6);
     if (currentAnim === 'walk') walkPhase += dt * (walkRate || (presence.running ? 12 : 7));
-    const s = Math.sin(walkPhase) * walkW;
+    const s = (bodyLifeOn() ? stridePlant(walkPhase) : Math.sin(walkPhase)) * walkW;
     if (walkW > 0.001) {
       for (const k of ['luaX', 'luaY', 'luaZ', 'ruaX', 'ruaY', 'ruaZ', 'llaY', 'llaZ', 'rlaY', 'rlaZ', 'spineY'])
         o[k] += (rest[k] - o[k]) * walkW;
@@ -1400,7 +1633,7 @@ const poseController = {
     }
     mouthOverride = gestureMouth;
     this.out = o;
-    return { o, shoulders, squat, stride: s, walkW, t, heldW, airW, sitW };
+    return { o, shoulders, squat, stride: s, walkW, t, dt, heldW, airW, sitW };
   },
 };
 window.__poseController = poseController;
@@ -1409,6 +1642,7 @@ let restHipsPos = null;      // normalized hips position at load (VRMA clips mov
 function boneNode(n) { return vrmInstance && vrmInstance.humanoid.getNormalizedBoneNode(n); }
 
 function writePose(frame, now) {
+  bodyLifeApply(frame, now);            // Phase 3: overlap, anticipation, breath, noise, weight shift (no-op when off)
   const { o, shoulders, squat, stride, walkW: w } = frame;
   const tt = frame.t || 0, hw = frame.heldW || 0, aw = frame.airW || 0, sw = frame.sitW || 0;
   const B = (n) => boneNode(n);
@@ -1440,6 +1674,21 @@ function writePose(frame, now) {
   if (hips && restHipsPos) {
     hips.rotation.set(0, 0, 0);
     hips.position.set(restHipsPos.x + (frame.hipShift || 0), restHipsPos.y + o.hipY - squat * T('SQUAT_DROP', 0.40), restHipsPos.z + squat * 0.08);
+  }
+  const L3 = frame.bl;                  // Phase 3 hips and legs: sway, pelvic roll, planted feet (absent when the layer is off)
+  if (L3) {
+    if (hips && restHipsPos) {
+      hips.rotation.set(0, L3.hipYaw, L3.hipRoll);
+      hips.position.x += L3.hipX; hips.position.y += L3.hipDrop;
+    }
+    const lu = B('leftUpperLeg'), ru = B('rightUpperLeg'), ll = B('leftLowerLeg'), rl = B('rightLowerLeg'),
+          lf = B('leftFoot'), rf = B('rightFoot');
+    if (lu) { lu.rotation.x += L3.thighL; lu.rotation.z += L3.legZ; }
+    if (ru) { ru.rotation.x += L3.thighR; ru.rotation.z += L3.legZ; }
+    if (ll) ll.rotation.x += L3.kneeL;
+    if (rl) rl.rotation.x += L3.kneeR;
+    if (lf) lf.rotation.x += L3.footL;
+    if (rf) rf.rotation.x += L3.footR;
   }
   // head: the pose, then gaze, then the small movements of talking
   const head = B('head');
@@ -1710,10 +1959,11 @@ function tick() {
         procGesture = null;
       }
     }
+    try { clothStep(dt, t); } catch (e) { window.EVA_CLOTH_PHYSICS = false; console.warn('cloth physics disabled after an error:', e && e.message); }
     applyCrossfade();
     presenceFace(dt);
     // Turn toward where she is walking, and back to face the person after.
-    facing += (facingTarget - facing) * Math.min(1, dt * 4);
+    facing = faceStep(facing, facingTarget, dt);
     vrmInstance.scene.rotation.y = Math.PI + facing + (window.__labYaw || 0);
     vrmInstance.update(dt);
     try { updateHelpers(t, dt); } catch (e) { /* the lights are decoration: never break the frame */ }

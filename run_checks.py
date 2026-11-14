@@ -26,7 +26,7 @@ MODULES = ["config", "logger", "system_tools", "scheduler", "vision",
            "core/agent", "core/runtime", "core/speaker", "core/llm", "core/prompt", "core/results",
            "core/presence_impl", "core/gui", "core/toolset/desktop", "core/toolset/web_files_system",
            "core/toolset/presence",
-           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline", "world_sensor"]
+           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline", "world_sensor", "body_life"]
 
 failures = []
 
@@ -6665,6 +6665,53 @@ def the_world_sensor_sees_without_touching():
         assert forbidden not in src, f"world_sensor.py mentions {forbidden}: it must only read"
 
 
+def the_body_flags_reach_the_page():
+    """Phase 3: EVA_BODY_LIFE / EVA_CLOTH_PHYSICS and the cloth tuning reach the page the way the other flags
+    do, default on, switch off cleanly, and the page reads exactly the names Python sends."""
+    import shutil, subprocess
+    import config
+    import body_life
+    # defaults: on, with sane tuning
+    assert config.EVA_BODY_LIFE is True and config.EVA_CLOTH_PHYSICS is True
+    js = body_life.page_flags_js(config)
+    assert "window.EVA_BODY_LIFE = true;" in js and "window.EVA_CLOTH_PHYSICS = true;" in js, js
+    tune = json.loads(re.search(r"EVA_CLOTH_TUNE = (\{.*?\});", js).group(1))
+    assert set(tune) == {"stiffness", "drag", "breeze"} and all(isinstance(v, float) for v in tune.values()), tune
+    assert tune == {"stiffness": config.EVA_CLOTH_STIFFNESS, "drag": config.EVA_CLOTH_DRAG,
+                    "breeze": config.EVA_CLOTH_BREEZE}, tune
+    # each flag switches its own half off
+    ns = types.SimpleNamespace
+    both_off = body_life.page_flags_js(ns(EVA_BODY_LIFE=False, EVA_CLOTH_PHYSICS=False))
+    assert "EVA_BODY_LIFE = false;" in both_off and "EVA_CLOTH_PHYSICS = false;" in both_off, both_off
+    only_cloth_off = body_life.page_flags_js(ns(EVA_BODY_LIFE=True, EVA_CLOTH_PHYSICS=False))
+    assert "EVA_BODY_LIFE = true;" in only_cloth_off and "EVA_CLOTH_PHYSICS = false;" in only_cloth_off
+    # an old config without the settings, or junk in them, still gives a working page
+    bare = body_life.page_flags_js(ns())
+    assert "EVA_BODY_LIFE = true;" in bare and "EVA_CLOTH_PHYSICS = true;" in bare, bare
+    junk = body_life.page_flags_js(ns(EVA_CLOTH_STIFFNESS="lots", EVA_CLOTH_DRAG=float("nan"), EVA_CLOTH_BREEZE=99))
+    jt = json.loads(re.search(r"EVA_CLOTH_TUNE = (\{.*?\});", junk).group(1))
+    assert jt["stiffness"] == 0.85 and jt["drag"] == 0.9 and jt["breeze"] == 3.0, jt   # junk -> default, huge -> clamped
+    # the page reads every name Python sends, and Python sends them from the same place as the other flags
+    here = os.path.dirname(os.path.abspath(__file__))
+    html = open(os.path.join(here, "web", "avatar_3d.html"), encoding="utf-8").read()
+    for name in body_life.PAGE_FLAGS:
+        assert f"window.{name}" in html, f"the page never reads window.{name}"
+    ui = open(os.path.join(here, "avatar_ui.py"), encoding="utf-8").read()
+    assert "body_life.page_flags_js(config)" in ui and ui.index("body_life.page_flags_js") > ui.index("def _push_gesture_settings"), \
+        "avatar_ui does not send the Phase 3 flags with the other page settings"
+    # the page's default is ON when Python has said nothing (undefined is not false)
+    assert "window.EVA_BODY_LIFE !== false" in html and "window.EVA_CLOTH_PHYSICS !== false" in html
+    # the string really sets the page's flags (evaluated as the page's JS would)
+    if shutil.which("node"):
+        probe = ("const w = {}; new Function('window', process.argv[1])(w); console.log(JSON.stringify(w));")
+        r = subprocess.run(["node", "-e", probe, both_off], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr[-300:]
+        got = json.loads(r.stdout)
+        assert got["EVA_BODY_LIFE"] is False and got["EVA_CLOTH_PHYSICS"] is False and "stiffness" in got["EVA_CLOTH_TUNE"], got
+    else:
+        print("        (node part skipped: node not installed)")
+
+
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",
                    animation_follows_the_task),
                   ("the agent drives the activity pose: thinking -> per tool -> idle",
@@ -6757,7 +6804,9 @@ for label, fn in [("the animation pose follows the task (tool and skill both map
                    fixes_from_the_1001_log),
                   ("next level: hearing, second provider, fast reader, coding helper, being shown",
                    next_level_hearing_reader_coder_watch),
-                   ("the world sensor sees without touching windows", the_world_sensor_sees_without_touching)]:
+                   ("the world sensor sees without touching windows", the_world_sensor_sees_without_touching),
+                   ("body life and cloth flags reach the page (default on, switch off cleanly)",
+                    the_body_flags_reach_the_page)]:
     check(label, fn)
 
 print()

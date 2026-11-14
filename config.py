@@ -103,6 +103,16 @@ EVA_ATTENTION = True
 EVA_FOCUS_MODE = True
 EVA_WORLD_HZ = 8
 EVA_FOCUS_TYPING_KEYS_PER_MIN = 120
+# Phase 3 body (2026-11-14): a body that moves like a person. EVA_BODY_LIFE: breathing scaled by energy,
+# weight shifts with hip sway, head-leads/torso-follows overlap, a wind-up before and a settle after every
+# sizeable move, smooth never-repeating micro-motion. EVA_CLOTH_PHYSICS: her walk's inertia and a light breeze
+# drive the model's own hair/skirt spring bones (spring-dampers if a model has none). The three numbers tune
+# it: multipliers on the model's own spring-bone stiffness and drag, and the breeze strength (0 = none).
+EVA_BODY_LIFE = True
+EVA_CLOTH_PHYSICS = True
+EVA_CLOTH_STIFFNESS = 0.85
+EVA_CLOTH_DRAG = 0.9
+EVA_CLOTH_BREEZE = 1.0
 # Bored for a while with the person around: she looks around the PC (disk, old downloads, memory
 # and CPU hogs, Recycle Bin, open windows, battery) and OFFERS one fix. Never acts on her own.
 PATROL = True
