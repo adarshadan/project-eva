@@ -49,6 +49,7 @@ def _client(ref=None):
 # refused or has no key is skipped and rested for REST_SECONDS so later turns start with one that
 # works. The person hears nothing about it unless every model fails.
 REST_SECONDS = 300
+_SKIP_TOLD = set()     # backup models without a key, already mentioned in the log
 _resting = {}                  # ref -> monotonic time it may be tried again
 _last = {"ref": None}
 
@@ -63,7 +64,9 @@ def chain() -> list:
         if ok:
             out.append(ref)
         else:
-            log.warning(f"Model {ref} skipped: {why}")
+            if ref not in _SKIP_TOLD:            # once per session: it was logged on every request (2026-11-14)
+                _SKIP_TOLD.add(ref)
+                log.warning(f"Model {ref} skipped: {why}")
     if not out:
         return refs[:1]                     # nothing usable: try the primary so the error explains why
     now = time.monotonic()
