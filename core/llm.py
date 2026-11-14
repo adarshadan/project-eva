@@ -273,7 +273,7 @@ def _call_model(messages: list[dict], system_prompt: str, tools: list, ref: str 
         top_p=0.95,
         stream=True,
     )
-    if providers.is_nim(ref) or _CLIENT["c"] is not None:
+    if (providers.is_nim(ref) and "minimax" not in ref.lower()) or _CLIENT["c"] is not None:
         # Nemotron 3 exposes a real reasoning budget (NVIDIA endpoints only -- strict providers
         # reject unknown fields). Kimi K3 reasoned at length on every turn with no way to dial it
         # down, the documented cause of the latency seen in every session. Tunable in config.py.

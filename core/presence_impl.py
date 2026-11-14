@@ -16,6 +16,8 @@ from core.toolset.presence import GESTURES
 ALIASES = {
     "moonwalk": "dance", "spin": "dance", "celebrate": "cheer", "party": "dance", "groove": "dance",
     "boogie": "dance", "hop": "jump", "bounce": "jump", "up_and_down": "jump", "yay": "cheer", "hooray": "cheer",
+    "bhangra": "dance", "desi": "dance", "hiphop": "dance", "salsa": "dance", "disco": "dance", "moves": "dance",
+    "move": "dance", "breakdance": "dance", "waltz": "twirl", "ballet": "twirl",
     "hi": "wave", "bye": "wave", "goodbye": "wave",
     "applause": "clap", "applaud": "clap", "bravo": "clap", "oops": "facepalm", "doh": "facepalm",
     "love": "heart", "aww": "heart", "quiet": "shh", "hush": "shh", "silence": "shh", "time": "check_watch",

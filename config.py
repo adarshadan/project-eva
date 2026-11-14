@@ -21,7 +21,7 @@ NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 # 2026-10-28: NVIDIA stopped serving nemotron-3-super-120b-a12b to this key (404 "Function ... Not found
 # for account"; tools/models_now.py). The 3.5 Super VL model of the same size answers with tool calls and
 # also sees, so one model now does both jobs (Eva 2.0 design: one multimodal model).
-MODEL_ID = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+MODEL_ID = "minimaxai/minimax-m3.1-flash"
 
 # Model providers (providers.py). Any model setting here may be "provider:model-id" -- presets:
 # nvidia (default for a bare id), openrouter, openai, groq, together, ollama and lmstudio (local,
@@ -35,7 +35,7 @@ MODEL_ID = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 # 2026-11-10: a second free provider behind NVIDIA, so one provider being down or rate-limited does not stop
 # her. The "openrouter:" entries are skipped until a key is stored (free, no card: openrouter.ai -> Keys,
 # then set_key.bat OPENROUTER_API_KEY); its free tier is ~200 requests a day, so it is a backup only.
-MODEL_FALLBACKS = ("nvidia/nemotron-3-ultra-550b-a55b", "minimaxai/minimax-m3.1-flash",
+MODEL_FALLBACKS = ("nvidia/nemotron-3.5-super-vl-120b-a12b", "nvidia/nemotron-3-ultra-550b-a55b",
                    "openrouter:nvidia/nemotron-3.5-super-vl:free", "openrouter:thinkingmachines/inkling:free")
 # More OpenAI-compatible endpoints, or a changed preset:
 #   PROVIDERS = {"azure": {"base_url": "https://<name>.openai.azure.com/openai/v1", "key": "AZURE_OPENAI_KEY"}}
@@ -77,14 +77,13 @@ VISION_LOCATE_BUDGET = 60          # seconds for one locate_on_screen, all passe
 
 # A model call is cut short when its reasoning runs away (eva.log 2026-10-12 00:05: it went round
 # in circles for 70 s): longer than this many seconds before any answer, longer than this many
-# characters, or repeating itself. She is then told to decide from what she knows.
-REASONING_MAX_SECONDS = 45
-REASONING_MAX_CHARS = 16000
+# characters, or repeating itself. Set to 120s to allow thorough reasoning on multi-step and writing tasks.
+REASONING_MAX_SECONDS = 120
+REASONING_MAX_CHARS = 24000
 
-# "low" | "medium" | "high". Eva's work is mostly "pick the right tool and
-# call it", which does not need deep deliberation; raise this only if
-# decision quality is visibly suffering.
-REASONING_EFFORT = "low"
+# "low" | "medium" | "high". Raised to "medium" to allow sufficient reasoning
+# tokens for multi-step agentic tasks, arithmetic, tool planning, and disambiguation.
+REASONING_EFFORT = "medium"
 
 IDLE_ANIMATION_START_SECONDS = 90
 IDLE_NAP_SECONDS = 600

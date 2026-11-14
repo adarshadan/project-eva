@@ -2207,17 +2207,21 @@ def screenshot(path: str = None):
     # /tmp doesn't exist on Windows by default -- this was silently going to
     # fail every call on the only platform this app actually targets.
     path = path or os.path.join(tempfile.gettempdir(), "eva_screenshot.png")
-    with mss.mss() as sct:
-        # mon=0 is the VIRTUAL screen -- every monitor combined into one
-        # image. sct.shot()'s default of mon=1 is the primary monitor only,
-        # so on a multi-monitor setup vision saw the wrong screen and any
-        # coordinates derived from it pointed at the wrong display. mss
-        # returns absolute virtual-desktop coordinates for mon=0, which is
-        # the same space click_coords works in, so no rescaling is needed.
-        virtual = sct.monitors[0]
-        sct.shot(mon=0, output=path)
-    return {"path": path, "origin_x": virtual["left"], "origin_y": virtual["top"],
-            "width": virtual["width"], "height": virtual["height"]}
+    try:
+        with mss.mss() as sct:
+            # mon=0 is the VIRTUAL screen -- every monitor combined into one
+            # image. sct.shot()'s default of mon=1 is the primary monitor only,
+            # so on a multi-monitor setup vision saw the wrong screen and any
+            # coordinates derived from it pointed at the wrong display. mss
+            # returns absolute virtual-desktop coordinates for mon=0, which is
+            # the same space click_coords works in, so no rescaling is needed.
+            virtual = sct.monitors[0]
+            sct.shot(mon=0, output=path)
+        return {"path": path, "origin_x": virtual["left"], "origin_y": virtual["top"],
+                "width": virtual["width"], "height": virtual["height"]}
+    except Exception as exc:
+        log.warning("Screen capture failed: %s", exc)
+        return {"error": str(exc)}
 
 
 def list_background_jobs(top_n: int = 5):

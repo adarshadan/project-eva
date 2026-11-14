@@ -39,6 +39,11 @@ register("save_skill", "Save how to do a kind of task so you do it right next ti
          surface=S.SYSTEM, effect=E.MODIFY, verb="write", describe=lambda a: "Learning how to do this")
 
 # ---- reading the internet -----------------------------------------------------------
+register("web_search", "Search the public web for information, travel fares, release notes, news, docs and answers. "
+         "Returns top search result titles, URLs, and snippets. Follow up with read_web_page on the best URL.",
+         {"query": STR("The search query keywords."), "limit": INT("Number of results, default 5, max 10.")},
+         ["query"], surface=S.BROWSER, effect=E.OBSERVE, fn=web_reach.web_search, deadline=45,
+         verb="search", web=True, describe=lambda a: f"Searching the web for {_short(a.get('query'), 30)}")
 register("read_web_page", "Read a public web page as clean text, fast, without opening a browser. Best for "
          "articles, docs and search results pages. If it fails (login, human check, interactive page), "
          "use browser_open instead.",

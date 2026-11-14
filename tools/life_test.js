@@ -4,7 +4,7 @@
 const fs = require('fs');
 const src = fs.readFileSync(__dirname + '/../web/avatar_3d.html', 'utf8');
 const a = src.indexOf('function T(key, dflt)');
-const b = src.indexOf('}\n', src.indexOf("return (typeof v === 'number'")) + 2;
+const b = src.indexOf('}', src.indexOf("return (typeof v === 'number'")) + 1;
 const c = src.indexOf('window.EVA_LIFE = true;');
 const d = src.indexOf('// ---- the channels the controller owns');
 const code = src.slice(a, b) + '\n' + src.slice(c, d);

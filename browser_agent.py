@@ -315,15 +315,9 @@ code fences, in one of the exact shapes given in the user message."""
 
 
 def _extract_json(text: str) -> dict:
-    """The previous approach -- text[text.find("{"):text.rfind("}")+1] --
-    breaks on markdown-fenced JSON (```json ... ```), on any JSON value
-    that legitimately contains a '}' character before the real closing
-    brace, and returns garbage on an empty/non-JSON response. This tries
-    a direct parse first (the common case, already valid JSON), then
-    strips markdown fences, then falls back to matching the first
-    balanced {...} span by tracking actual brace depth rather than just
-    hunting for the first/last brace characters."""
+    """Strips thinking tags and fences, then extracts JSON."""
     text = (text or "").strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
     try:
         return json.loads(text)
     except json.JSONDecodeError:

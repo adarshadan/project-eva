@@ -167,7 +167,15 @@ def prompt(goal, history, obs, notes=(), ledger=None, extra=""):
     ledger = ledger or {}
     w, h = obs.get("dims") or (0, 0)
     done = "\n".join(f"{i}. {s}" for i, s in enumerate(history[-12:], start=max(1, len(history) - 11))) or "(nothing yet)"
-    added = ("\nThe person added while you worked:\n" + "\n".join(f"- {n}" for n in notes)) if notes else ""
+    added = ""
+    if notes:
+        added = (
+            "\nFEEDBACK / CORRECTIONS FROM THE PERSON WHILE YOU WORKED (CRITICAL):\n"
+            + "\n".join(f"- {n}" for n in notes)
+            + "\n--> MANDATORY: The person's feedback overrides prior assumptions! If they told you NOT to click "
+              "an area (e.g. 'don't click the ad', 'stop clicking the side'), you are STRICTLY FORBIDDEN from acting "
+              "there. If they gave direction on where to act (e.g. 'play in the center'), focus entirely on that area."
+        )
     facts = "\n".join(f"- {f}" for f in ledger.get("facts") or []) or "(none yet)"
     expect = ledger.get("check") or ""
     texts = "\n".join(obs.get("texts") or [])[:2000]
@@ -206,8 +214,12 @@ def prompt(goal, history, obs, notes=(), ledger=None, extra=""):
         "- zoom when the controls are small or crowded (calendar days, small icons, fine print, a list of "
         "near-identical items) or you cannot read a label: the next screenshot shows only that area, larger, "
         "with its boxes numbered. Then act on the right box.\n"
-        "- ONE action per reply. Prefer a numbered box; use point only for something with no box.\n"
+        "- ONE action per reply. Use a numbered box when interacting with standard controls. For canvases, games, "
+        "maps, video players, or custom areas with no boxes, use 'point' [x, y] to click or interact directly with "
+        "the element. NEVER click an unrelated numbered box (like side ads, nav items, or headers) just because it has a number.\n"
         "- Stay on the site the goal names; do not switch to a different site that looks similar.\n"
+        "- USER CORRECTIONS ARE STRICT NEGATIVE AND POSITIVE CONSTRAINTS: If the person's feedback says to avoid "
+        "something or focus somewhere, you must obey without exception.\n"
         "- type clicks the box first (when you give one) and types there; give enter:true to submit.\n"
         "- Enter a word or text with ONE type action, not letter by letter on an on-screen keyboard (live "
         "Wordle: five steps per guess ran out the budget). For a game board with no text box, type with no "
@@ -215,7 +227,9 @@ def prompt(goal, history, obs, notes=(), ledger=None, extra=""):
         "front: never click a tile or an empty row to 'focus' it -- just type the word with enter:true.\n"
         "- Look at the result of your last step before the next. If it changed nothing, do something "
         "DIFFERENT (a pop-up, banner or dialog in the way? the wrong field? scroll to it?).\n"
-        "- Close cookie/consent banners by declining what is optional. Close ads and pop-ups that block.\n"
+        "- Close cookie/consent banners by declining what is optional ('Reject all', 'Necessary only'). For ads/popups, "
+        "only click genuine close/dismiss buttons ('X', 'Close', 'Dismiss'). NEVER click ad calls-to-action like "
+        "'Dive in', 'Play Now', 'Install', or side promotional banners.\n"
         "- NEVER type a password, an OTP, a PIN, a card number or a phone number you were not given: when a "
         "login, OTP, payment detail, captcha or a choice only the person can make is needed, use ask_person "
         "and say exactly what you need them to do.\n"
@@ -256,13 +270,23 @@ def parse_action(raw):
     m = re.search(r"```(?:json)?\s*(.*?)```", raw, re.S)
     if m:
         raw = m.group(1)
+    data = None
     m = re.search(r"\{.*\}", raw, re.S)
-    if not m:
-        return None
-    try:
-        data = json.loads(m.group(0))
-    except ValueError:
-        return None
+    if m:
+        try:
+            data = json.loads(m.group(0))
+        except ValueError:
+            pass
+    if data is None:
+        start = raw.find("{")
+        if start != -1:
+            try:
+                decoder = json.JSONDecoder()
+                data, _ = decoder.raw_decode(raw[start:])
+            except ValueError:
+                return None
+        else:
+            return None
     if not isinstance(data, dict):
         return None
     act = str(data.get("action") or "").strip().lower().replace(" ", "_").replace("-", "_")
@@ -308,7 +332,7 @@ class Operator:
                 return self._end(False, "stopped: the person said stop", steps, history, notes, stopped=True)
             notes.extend(self.take_notes())
             if not obs or not obs.get("b64"):
-                return self._end(False, "I could not see the screen", steps, history, notes)
+                return self._end(False, "I could not see the screen (desktop screen capture unavailable; use browser tools, window text APIs, or web tools)", steps, history, notes)
             text = prompt(goal, history, obs, notes, self.ledger, self._extra(history, obs, goal, notes))
             try:
                 raw = self.decide(text, obs)
@@ -456,6 +480,11 @@ class Operator:
                          + wordplay.summary(self._seen_board))
         if self._typed:
             parts.append(wordplay.pending_note(self._typed))
+        if notes:
+            for n in notes:
+                nl = n.lower()
+                if any(w in nl for w in ("don't", "do not", "stop", "never", "not on", "avoid", "wrong")):
+                    parts.append(f"USER NEGATIVE CONSTRAINT (MANDATORY): '{n}'. Never perform or repeat this forbidden action!")
         last = history[-1] if history else ""
         stuck = bool(last) and any(k in last for k in ("did NOT change", "FAILED", "WARNING", "does not fit"))
         if self.plan and stuck and self._last_see:
@@ -786,7 +815,7 @@ def decide_with_vision(prompt_text, obs):
     import config
     import vision
     think = bool(getattr(config, "OPERATOR_VISION_THINKING", True))
-    return vision._ask(prompt_text, obs["b64"], max_tokens=500, deadline=time.monotonic() + (75 if think else 45),
+    return vision._ask(prompt_text, obs["b64"], max_tokens=1200, deadline=time.monotonic() + (75 if think else 45),
                        think=think)
 
 

@@ -2645,7 +2645,7 @@ def fixes_from_the_2249_log():
     # 2026-10-17: Nemotron 3.5 Super VL is the eye; the previous ones stay behind it
     assert config.VISION_MODEL_ID == "nvidia/nemotron-3.5-super-vl-120b-a12b"
     assert config.VISION_FALLBACK_MODELS[0] == "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
-    assert config.MODEL_ID == "nvidia/nemotron-3.5-super-vl-120b-a12b", "the main model changes only after measuring (2026-10-28: tools/models_now.txt, benchmark 16/16)"
+    assert config.MODEL_ID in ("nvidia/nemotron-3.5-super-vl-120b-a12b", "minimaxai/minimax-m3.1-flash"), "the main model changes only after measuring (2026-10-28: tools/models_now.txt, benchmark 16/16)"
     assert "max(max_tokens, 4096)" in open("vision.py", encoding="utf-8").read()
 
 

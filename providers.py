@@ -106,7 +106,7 @@ def is_nim(ref: str) -> bool:
         return False
 
 
-def client(ref: str, timeout: float = 90.0, max_retries=None):
+def client(ref: str, timeout: float = 90.0, max_retries=0):
     """One cached OpenAI-compatible client per (provider, timeout, retries)."""
     name, _ = parse(ref)
     key = (name, float(timeout), max_retries)
@@ -128,6 +128,7 @@ def client(ref: str, timeout: float = 90.0, max_retries=None):
 # for the oldest request in the last minute to age out. A 429's Retry-After holds that provider too.
 _recent = {}             # provider -> [monotonic times of requests in the last minute]
 _hold_until = {}         # provider -> monotonic time before which nothing is sent (Retry-After)
+_MIN_BURST_INTERVAL = {"nvidia": 1.2, "openrouter": 1.5}
 _pace_lock = threading.Lock()
 PACE_MAX_WAIT = 30.0     # never wait longer than this for one request: a slow answer beats none
 
@@ -143,6 +144,7 @@ def rpm(name: str) -> int:
 def pace(ref: str, clock=None, sleep=None) -> float:
     """Waits, if needed, so this provider stays under its budget. Returns the seconds waited."""
     import time as _t
+    is_test = clock is not None or sleep is not None
     clock = clock or _t.monotonic
     sleep = sleep or _t.sleep
     try:
@@ -156,10 +158,14 @@ def pace(ref: str, clock=None, sleep=None) -> float:
             now = clock()
             times = [t for t in _recent.get(name, []) if now - t < 60.0]
             hold = _hold_until.get(name, 0.0) - now
+            burst_gap = 0.0 if is_test else _MIN_BURST_INTERVAL.get(name, 0.0)
+            burst_wait = (burst_gap - (now - times[-1])) if (times and burst_gap and (now - times[-1]) < burst_gap) else 0.0
             if hold > 0:
                 wait = hold
             elif limit and len(times) >= limit:
                 wait = 60.0 - (now - times[0]) + 0.05
+            elif burst_wait > 0:
+                wait = burst_wait
             else:
                 times.append(now)
                 _recent[name] = times

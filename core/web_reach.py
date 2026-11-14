@@ -166,6 +166,41 @@ def read_web_page(url: str):
             "hint": "open it with browser_open and read it with browser_extract instead"}
 
 
+def web_search(query: str, limit: int = 5):
+    """Search the public web using DuckDuckGo HTML and return top search results (title, url, snippet)."""
+    import urllib.parse
+    import requests
+    q = str(query or "").strip()
+    if not q:
+        return {"ok": False, "error": "query cannot be empty"}
+    limit = max(1, min(int(limit or 5), 10))
+    url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(q)}"
+    try:
+        r = requests.get(url, headers={"User-Agent": UA}, timeout=15)
+        r.raise_for_status()
+        titles = re.findall(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', r.text, re.S)
+        snippets = re.findall(r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>', r.text, re.S)
+        results = []
+        for (href, raw_title), raw_snip in zip(titles, snippets):
+            title = html.unescape(re.sub(r'<[^>]+>', '', raw_title)).strip()
+            snip = html.unescape(re.sub(r'<[^>]+>', '', raw_snip)).strip()
+            actual_url = href
+            if "uddg=" in href:
+                p = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
+                actual_url = p.get("uddg", [href])[0]
+            elif href.startswith("//"):
+                actual_url = "https:" + href
+            if not title:
+                continue
+            results.append({"title": title, "url": actual_url, "snippet": snip})
+            if len(results) >= limit:
+                break
+        return {"ok": True, "query": q, "results": results, "count": len(results)}
+    except Exception as e:
+        log.warning(f"web_search failed for {q!r}: {e}")
+        return {"ok": False, "error": f"search failed: {type(e).__name__}: {e}"}
+
+
 # ---- YouTube --------------------------------------------------------------------------
 def video_id(url: str):
     u = str(url or "").strip()

@@ -272,6 +272,23 @@ class Agent:
         was_closed = tb is not None and name != "use_tools" and toolbox.group_of(name) not in (None, *tb.opened())
         if was_closed:
             tb.noticed(name)                     # named in the index: it runs, and its group opens
+        # Resolve natural parameter aliases before dropping undeclared ones
+        aliases = {
+            "name": ("animation", "gesture", "tool_name", "app_name", "item_name", "key_name"),
+            "path": ("file", "filename", "filepath", "dir", "directory", "folder", "folder_path"),
+            "text": ("content", "message", "string", "body", "input_text"),
+            "query": ("q", "search", "search_term", "search_query", "term"),
+            "url": ("link", "address", "uri", "web_address", "website"),
+            "window_handle": ("handle", "hwnd", "window_id", "window"),
+            "process_id": ("pid", "proc_id"),
+        }
+        for target, syns in aliases.items():
+            if target in tool.params and target not in args:
+                for syn in syns:
+                    if syn in args:
+                        args[target] = args.pop(syn)
+                        break
+
         # Only declared parameters reach the implementation. An undeclared one
         # is either a harmless guess or an attempt to reach an internal option
         # (focus_window's allow_own, say); neither should run.
@@ -430,22 +447,37 @@ class Agent:
             self._on_state("idle", "")
 
     def _context_now(self):
-        """The turn's context plus what must survive history trimming: the game in progress."""
+        """The turn's context plus what must survive history trimming: fresh screen state, game, browser link, and progress."""
+        parts = [self._memory_text]
+        try:
+            extra = self._extra_context()
+            if extra:
+                parts.append(extra)
+        except Exception:
+            pass
         try:
             import game_play
             block = game_play.prompt_block()
+            if block:
+                parts.append(block)
         except Exception:
-            block = ""
+            pass
         try:
             import browser_link
             live = browser_link.status()["browsers"]
+            if live:
+                parts.append(f"THE PERSON'S OWN BROWSER is connected ({', '.join(live)}): for anything on a page they have "
+                             "open or a site where they are signed in, use page_tabs, page_elements, page_read, page_click, "
+                             "page_type and page_go -- exact elements, their session. Your own automation browser "
+                             "(browser_open/browser_act) is for pages they do not need to see.")
         except Exception:
-            live = []
-        link = (f"THE PERSON'S OWN BROWSER is connected ({', '.join(live)}): for anything on a page they have "
-                "open or a site where they are signed in, use page_tabs, page_elements, page_read, page_click, "
-                "page_type and page_go -- exact elements, their session. Your own automation browser "
-                "(browser_open/browser_act) is for pages they do not need to see.") if live else ""
-        return "\n\n".join(p for p in (self._memory_text, block, link) if p)
+            pass
+        if getattr(self, "turn", None) and self.turn.tools:
+            steps_desc = []
+            for i, (tname, tok) in enumerate(self.turn.tools[-6:], 1):
+                steps_desc.append(f"- Step {i}: {tname} -> {'completed successfully' if tok else 'failed or needs verification'}")
+            parts.append("MULTI-STEP PROGRESS (continue step-by-step toward the user's goal):\n" + "\n".join(steps_desc))
+        return "\n\n".join(p for p in parts if p)
 
     def _fold_in_interjections(self) -> bool:
         """The person spoke while she worked: their words join this turn now."""
@@ -455,9 +487,13 @@ class Agent:
             said = []
         for text, mode in said:
             log.info(f"Folded into the running task: {text!r}")
+            tl = text.lower()
+            is_neg = any(w in tl for w in ("don't", "do not", "stop", "never", "not ", "wrong", "avoid"))
+            constraint = ("\n[system] CRITICAL NEGATIVE CONSTRAINT: The person explicitly told you to stop or avoid this! "
+                          "You MUST strictly follow this and NEVER perform or repeat the forbidden action.") if is_neg else ""
             self.messages.append({"role": "user", "content": (
                 f"[{mode}, said while you were working] {text}\n[system] This changes or corrects what you are "
-                "doing: take it into account from now on (it may override your plan). Stop only if they asked you to.")})
+                f"doing: take it into account from now on (it may override your plan). Stop only if they asked you to.{constraint}")})
             self.turn.text = f"{self.turn.text}\n{text}"
         return bool(said)
 
@@ -791,10 +827,6 @@ class Agent:
                 parts.append(toolbox.index(registry.names()))
             except Exception:
                 log.exception("Tool group index unavailable")
-        try:
-            parts.append(self._extra_context())
-        except Exception:
-            log.exception("Extra context failed -- continuing without it")
         return "\n\n".join(p for p in parts if p)
 
     def _hand_off(self, mark, reply):
@@ -965,6 +997,11 @@ _ACTION_REQUEST = re.compile(
     r"rename|copy|paste|install|download|search|find|navigate|focus|exit|quit|log ?in|sign ?in|accept|reject|"
     r"enable|disable|increase|decrease|raise|lower|set|change|fill|submit)\b", re.I)
 
+# Requests for written prose/content delivered directly in chat (not file/desktop operations).
+_CONTENT_REQUEST = re.compile(
+    r"\b(?:write|draft|compose|give me|tell me|explain)\b.*\b(?:paragraph|essay|story|poem|haiku|description|summary|explanation|passage|intro|overview|words?\b)",
+    re.I)
+
 
 def claim_without_action(reply, turn_text, results):
     """A reply saying something on screen is now done/changed, in a turn that asked
@@ -972,7 +1009,10 @@ def claim_without_action(reply, turn_text, results):
     -> "The video is paused." with nothing done."""
     if results or not reply or not _CLAIM.search(reply) or _HEDGE.search(reply):
         return None
-    if not _ACTION_REQUEST.search(str(turn_text or "").split("\n")[0]):
+    first_line = str(turn_text or "").split("\n")[0]
+    if _CONTENT_REQUEST.search(first_line):
+        return None
+    if not _ACTION_REQUEST.search(first_line):
         return None
     return "no tool was called this turn, so nothing was actually done"
 
