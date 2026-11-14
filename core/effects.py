@@ -59,7 +59,10 @@ def write_effect(args):
 def command_effect(args):
     argv, err = command_policy.parse(str(args.get("command", "")))
     if err or command_policy.is_denied(argv):
-        return Effect.DESTROY            # refused by the tool itself; never quietly allowed
+        # run_command refuses these itself (backend_tools.run_command), so nothing runs either way. Asking
+        # first only put a pointless approval dialog in front of a command that was then refused
+        # (eva.log 2026-11-14 12:54-12:55: four prompts for "git ... && ..." and "dir ... | findstr").
+        return Effect.OBSERVE
     return Effect.OBSERVE if command_policy.is_read_only(argv) else Effect.DESTROY
 
 

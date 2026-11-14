@@ -27,7 +27,9 @@ _FLAGS_ONLY = {
     "getmac", "uname", "uptime", "df", "free", "id", "date", "pwd",
 }
 # Read-only, but take a positional target (a host, a name, a folder).
-_READ_WITH_TARGET = {"ping", "nslookup", "where", "which", "ls"}
+_READ_WITH_TARGET = {"ping", "nslookup", "where", "which", "ls",
+                     # listing and searching (2026-11-14: "dir /s /b *.json" asked for approval three times)
+                     "dir", "tree", "findstr", "type", "cat", "more"}
 
 _GIT_READ = {"status", "log", "diff", "branch", "rev-parse", "remote", "show",
              "ls-files", "describe", "blame", "shortlog", "tag"}

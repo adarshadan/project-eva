@@ -3415,6 +3415,11 @@ def backend_files_and_commands():
         assert cp.is_denied(cp.parse(c)[0]) and not bt.run_command(c)["ok"], c
     assert cap.is_gated("run_command", {"command": "rm x"})
     assert not cap.is_gated("run_command", {"command": "whoami"})
+    # 2026-11-14: no approval prompt for a command the tool refuses anyway, or for listing a folder
+    assert not cap.is_gated("run_command", {"command": "git branch -a && git remote -v"})
+    assert not cap.is_gated("run_command", {"command": "format c:"}) and not bt.run_command("format c:")["ok"]
+    assert not cap.is_gated("run_command", {"command": "dir /s /b *.json"})
+    assert cap.is_gated("run_command", {"command": "git push"}) and cap.is_gated("run_command", {"command": "python x.py"})
     assert bt.run_command("whoami")["ok"]
     assert "shell operators" in bt.run_command("ls | cat")["error"]
     seen = {}
