@@ -6,3 +6,6 @@
 dxcam; sys_platform == "win32"
 winocr; sys_platform == "win32"
 pydirectinput; sys_platform == "win32"
+# Phase 4 (music.py): what the PC plays, through WASAPI loopback -- a PyAudio fork (module pyaudiowpatch, so it
+# does not clash with PyAudio above). Optional: if it cannot install, the rest still does. Imported lazily: without it Eva starts and the music feature is just off.
+PyAudioWPatch==0.2.12.9; sys_platform == "win32"

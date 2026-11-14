@@ -1005,6 +1005,9 @@ function presenceStep(frame, t, dt, idleLike) {
         if (def.hip) frame.hipShift += def.hip(p);
       }
     }
+    // music: she dances to the beat (Phase 4; a fault here only switches the dance off)
+    try { danceStep(frame, o, t, dt, now, idleLike, P); }
+    catch (e) { dance.w = 0; window.EVA_MUSIC_DANCE = false; console.warn('dance disabled after an error:', e); }
   } catch (e) {
     window.EVA_PRESENCE = false;
     console.warn('presence layer disabled after an error:', e);
@@ -1028,6 +1031,184 @@ function presenceFace(dt) {
     window.EVA_PRESENCE = false;
     console.warn('presence face disabled after an error:', e);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Music and dancing (Phase 4). Python (music.py) listens to what the PC plays and sends numbers
+// ~20x a second: {playing, bpm, phase, energy, low, high}; phase 0 is the beat itself. Nothing of
+// the sound reaches the page. Here the dance is GENERATED, not played back:
+//   beat clock   her own clock, locked to the sent phase (extrapolated from receipt, corrections
+//                capped so a late or noisy message never jerks her)
+//   phrases      8 or 16 beats; at each boundary an arm pattern x a hip/step pattern x a side is drawn
+//                for the energy tier (calm sway for slow songs or quiet ones, mid, high), never the same
+//                combination twice in a row; the old pattern crossfades into the new over one beat
+//   intensity    follows the smoothed loudness; bounce depth follows the bass
+//   guards       only while music plays (and is fresh), she is idle-like, and NOT in focus mode; every
+//                dance channel is slew-limited, so nothing can snap
+// She can still be asked to dance (the dance clip): that path does not go through here.
+// ---------------------------------------------------------------------------
+window.EVA_MUSIC_DANCE = true;
+let music = null;
+window.setMusic = function (m) {
+  try {
+    if (!m || typeof m !== 'object') return;
+    const bpm = +m.bpm, ph = +m.phase;
+    const ok = !!m.playing && isFinite(bpm) && bpm >= 40 && bpm <= 220 && isFinite(ph);
+    const lim = (x) => Math.max(0, Math.min(1, +x || 0));
+    music = { playing: ok, bpm: ok ? bpm : 0, phase: ok ? ((ph % 1) + 1) % 1 : 0,
+              energy: lim(m.energy), low: lim(m.low), high: lim(m.high), at: performance.now() / 1000 };
+  } catch (e) { /* malformed input: keep the last good state */ }
+};
+
+const dance = {
+  w: 0, synced: false, beats: 0, bpm: 120, k: 0.4,
+  phraseStart: 0, phraseLen: 8, cur: null, prev: null, blend: 1, last: null, lastArm: null,
+  out: {}, log: [],
+};
+const DANCE_SLEW = { squat: 0.7, hipShift: 0.45, hipY: 0.3, footTap: 8 };       // per second; others 5 rad/s
+const DANCE_CH = ['luaX', 'luaY', 'luaZ', 'ruaX', 'ruaY', 'ruaZ', 'llaY', 'llaZ', 'rlaY', 'rlaZ',
+                  'spineX', 'spineY', 'spineZ', 'chestX', 'headX', 'headY', 'headZ'];
+const D_PI = Math.PI;
+
+// arm patterns: (c) -> deltas on the arm and chest channels. c = { b, f, k, a, s, tf, hi }:
+// b beats into the phrase, f beat fraction (0 = on the beat), k intensity, a amplitude jitter,
+// s side (+-1), tf tempo factor (faster songs get smaller arcs), hi = highs 0..1.
+// Axes: arm Z + lowers the left arm and - the right; lifting is a negative luaZ and a positive ruaZ.
+const DANCE_ARMS = {
+  sway: (c) => { const sw = Math.sin(D_PI * c.b / 2 * c.s), A = c.a * c.tf;   // both arms drift out and in together
+    return { luaZ: 0.20 * sw * A - 0.18 * A, ruaZ: 0.20 * sw * A + 0.18 * A, llaY: -0.22, rlaY: 0.22,
+             spineZ: -0.03 * sw * A, headZ: 0.06 * sw * A }; },
+  hips: (c) => { const A = c.a * c.tf, dip = Math.pow(0.5 + 0.5 * Math.cos(2 * D_PI * c.f), 2);
+    return { luaX: 0.0, luaY: -0.30, luaZ: -0.35 - 0.04 * dip * A, llaY: -1.0,     // hands on the hips
+             ruaX: 0.0, ruaY: 0.30, ruaZ: 0.35 + 0.04 * dip * A, rlaY: 1.0 }; },
+  pump: (c) => { const alt = Math.sin(D_PI * c.b * c.s), A = c.a * c.tf, dip = 0.5 + 0.5 * Math.cos(2 * D_PI * c.f);
+    return { luaX: 0.38 + 0.26 * alt * A * c.k, ruaX: 0.38 - 0.26 * alt * A * c.k,     // fists forward, punching in turn
+             luaY: -0.25, ruaY: 0.25, luaZ: -0.10, ruaZ: 0.10,
+             llaY: -1.2 - 0.12 * dip * A, rlaY: 1.2 + 0.12 * dip * A }; },
+  clap: (c) => { const A = c.a * c.tf, t = Math.pow(0.5 + 0.5 * Math.cos(2 * D_PI * c.f), 3);
+    return { luaX: 0.55, ruaX: 0.55, luaY: -0.30 - 0.20 * t * A, ruaY: 0.30 + 0.20 * t * A,   // hands meet on the beat
+             llaY: -0.9 - 0.15 * t, rlaY: 0.9 + 0.15 * t, headX: -0.03 * t }; },
+  roof: (c) => { const A = c.a * c.tf, dip = 0.5 + 0.5 * Math.cos(2 * D_PI * c.f);
+    return { luaX: 0.75 + 0.14 * dip * A, ruaX: 0.75 + 0.14 * dip * A, luaY: -0.20, ruaY: 0.20,   // hands up, pushing
+             luaZ: -0.25, ruaZ: 0.25, llaY: -1.35 - 0.12 * dip * A, rlaY: 1.35 + 0.12 * dip * A, chestX: -0.05 }; },
+  wave: (c) => { const sw = Math.sin(D_PI * c.b / 2 * c.s), up = 1.2 + 0.7 * c.k, A = c.a * c.tf;   // arms up in a V, swaying
+    return { luaZ: -up + 0.28 * sw * A, ruaZ: up + 0.28 * sw * A,
+             llaY: -0.45, rlaY: 0.45, luaX: 0.1, ruaX: 0.1, spineZ: -0.05 * sw * A }; },
+  point: (c) => { const ph = Math.sin(D_PI * c.b / 2 * c.s), A = c.a * c.tf,           // one arm up and away, then the other
+    wl = Math.max(0, ph), wr = Math.max(0, -ph), up = 1.4 + 0.6 * c.k;
+    return { luaZ: -up * wl * A, llaY: -0.25 * wl - 0.2, luaX: 0.3 * wl,
+             ruaZ: up * wr * A, rlaY: 0.25 * wr + 0.2, ruaX: 0.3 * wr, spineZ: -0.06 * ph * A }; },
+};
+// hip and step patterns: knees (squat), hips sideways, a foot tap, torso and head
+const DANCE_LOWER = {
+  bounce: (c) => ({ squat: c.S * Math.pow(0.5 + 0.5 * Math.cos(2 * D_PI * c.f), 1.5),    // knees give on the beat
+                    hipY: 0.006 * (0.5 - 0.5 * Math.cos(2 * D_PI * c.f)), headX: 0.04 * c.k * (0.5 + 0.5 * Math.cos(2 * D_PI * c.f)) }),
+  step: (c) => { const st = Math.sin(D_PI * c.b * c.s);                                  // weight from foot to foot each beat
+    return { squat: c.S * 0.8 * Math.pow(0.5 + 0.5 * Math.cos(2 * D_PI * c.f), 1.5), hipShift: 0.032 * c.k * st * c.a,
+             spineZ: -0.07 * st * c.a, footTap: Math.max(0, -st) * 0.7, headZ: 0.05 * st * c.a }; },
+  sway: (c) => { const sw = Math.sin(D_PI * c.b / 2 * c.s);                              // slow side to side
+    return { squat: c.S * 0.5 * (0.5 + 0.5 * Math.cos(2 * D_PI * c.f)), hipShift: 0.034 * sw * c.a,
+             spineZ: -0.08 * sw * c.a, headZ: 0.07 * sw * c.a, hipY: 0.004 * (0.5 - 0.5 * Math.cos(2 * D_PI * c.f)) }; },
+  twist: (c) => { const sw = Math.sin(D_PI * c.b / 2 * c.s);                             // shoulders turn against the hips
+    return { squat: c.S * 0.7 * Math.pow(0.5 + 0.5 * Math.cos(2 * D_PI * c.f), 1.5), spineY: 0.20 * sw * c.a * c.k + 0.04 * sw,
+             headY: -0.10 * sw * c.a, hipShift: -0.012 * sw }; },
+  nod: (c) => ({ squat: c.S * 1.1 * Math.pow(0.5 + 0.5 * Math.cos(2 * D_PI * c.f), 1.5),   // head and chest on every beat
+                 headX: (0.10 + 0.08 * c.hi) * c.k * (0.5 + 0.5 * Math.cos(2 * D_PI * c.f)),
+                 chestX: 0.05 * c.k * (0.5 + 0.5 * Math.cos(2 * D_PI * c.f)) }),
+};
+const DANCE_POOLS = {
+  calm: { arms: ['sway', 'hips', 'pump'], lower: ['sway', 'twist', 'bounce'] },
+  mid:  { arms: ['pump', 'clap', 'hips', 'sway', 'point'], lower: ['bounce', 'step', 'sway', 'twist'] },
+  high: { arms: ['roof', 'wave', 'point', 'pump', 'clap'], lower: ['bounce', 'step', 'nod', 'twist'] },
+};
+function danceTier() {
+  if (dance.bpm < 90 || dance.k < 0.4) return 'calm';
+  return (dance.k > 0.72 && dance.bpm >= 100) ? 'high' : 'mid';
+}
+function danceNewPhrase() {
+  const D = dance, tier = danceTier(), pool = DANCE_POOLS[tier];
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  let ph = null;
+  for (let tries = 0; tries < 20; tries++) {
+    const cand = { arm: pick(pool.arms), lower: pick(pool.lower), s: Math.random() < 0.5 ? -1 : 1 };
+    cand.sig = cand.arm + '/' + cand.lower + '/' + (cand.s > 0 ? 'R' : 'L');
+    const sameArm = D.lastArm === cand.arm;
+    if (cand.sig !== D.last && (!sameArm || tries > 8)) { ph = cand; break; }
+  }
+  if (!ph) {                                      // cannot happen with these pools; still never repeat
+    ph = { arm: pool.arms[0], lower: pool.lower[0], s: D.last && D.last.endsWith('/R') ? -1 : 1 };
+    ph.sig = ph.arm + '/' + ph.lower + '/' + (ph.s > 0 ? 'R' : 'L');
+  }
+  ph.tier = tier;
+  ph.len = tier === 'high' ? (Math.random() < 0.7 ? 8 : 16) : (Math.random() < 0.5 ? 8 : 16);
+  ph.a = 0.85 + Math.random() * 0.3;
+  ph.start = D.beats;
+  D.prev = D.cur; D.cur = ph; D.blend = D.prev ? 0 : 1;
+  D.phraseStart = D.beats; D.phraseLen = ph.len;
+  D.last = ph.sig; D.lastArm = ph.arm;
+  D.log.push({ sig: ph.sig, tier, len: ph.len, at: D.beats });
+  if (D.log.length > 300) D.log.shift();
+}
+function danceDeltas(ph, c0, hi) {
+  const b = dance.beats - ph.start;
+  const c = { b, f: c0.f, k: c0.k, a: ph.a, s: ph.s, tf: c0.tf, S: c0.S * (ph.tier === 'calm' ? 0.55 : 1), hi };
+  const d = {}, add = (src) => { for (const k in src) d[k] = (d[k] || 0) + src[k]; };
+  add(DANCE_ARMS[ph.arm](c));
+  add(DANCE_LOWER[ph.lower](c));
+  return d;
+}
+function danceStep(frame, o, t, dt, now, idleLike, P) {
+  const D = dance;
+  const fresh = !!music && music.playing && now - music.at < 1.5;
+  const focus = !!P.focus || !!(world && world.focus && window.EVA_FOCUS_MODE !== false);
+  const on = fresh && window.EVA_MUSIC_DANCE !== false && !!idleLike && !focus;
+  D.w += ((on ? 1 : 0) - D.w) * Math.min(1, dt * (on ? 1.6 : 2.4));
+  if (!on && D.w < 0.003) { D.w = 0; D.synced = false; D.cur = D.prev = null; return; }
+  if (on) {
+    // tempo and loudness are smoothed; the beat clock is nudged toward the sent phase
+    D.bpm = D.synced ? D.bpm + (music.bpm - D.bpm) * Math.min(1, dt * 2) : music.bpm;
+    const want = Math.max(0.2, Math.min(1, 0.2 + 0.8 * music.energy));
+    D.k = D.synced ? D.k + (want - D.k) * Math.min(1, dt * 0.8) : want;
+    const target = (music.phase + (now - music.at) * music.bpm / 60) % 1;
+    if (!D.synced) {
+      D.beats = Math.floor(D.beats) + target; D.synced = true;
+      D.cur = null; danceNewPhrase();
+    } else {
+      let err = target - (D.beats - Math.floor(D.beats)); err -= Math.round(err);
+      const cap = 0.35 * dt;
+      D.beats += dt * D.bpm / 60 + Math.max(-cap, Math.min(cap, err * dt * 3));
+    }
+  } else {
+    D.beats += dt * D.bpm / 60;                   // fading out: the clock runs on, the body settles
+  }
+  if (D.beats - D.phraseStart >= D.phraseLen && on) danceNewPhrase();
+  D.blend = Math.min(1, D.blend + dt * D.bpm / 60);
+  if (!D.cur) return;
+  const tf = Math.max(0.6, Math.min(1.3, 110 / D.bpm));
+  const low = music ? music.low : 0.5, hi = music ? music.high : 0.3;
+  const c0 = { f: D.beats - Math.floor(D.beats), k: D.k, tf, S: (0.025 + 0.085 * D.k) * tf * (0.8 + 0.4 * low) };
+  const dc = danceDeltas(D.cur, c0, hi);
+  let d = dc;
+  if (D.blend < 1 && D.prev) {
+    const dp = danceDeltas(D.prev, c0, hi), x = smooth(D.blend);
+    d = {};
+    for (const k in dc) d[k] = dc[k] * x + (dp[k] || 0) * (1 - x);
+    for (const k in dp) if (!(k in dc)) d[k] = dp[k] * (1 - x);
+  }
+  // slew-limit every channel toward its target, then apply with the engage weight
+  const keys = DANCE_CH.concat(['squat', 'hipShift', 'hipY', 'footTap']);
+  for (const k of keys) {
+    const lim = (DANCE_SLEW[k] || 5) * dt, cur = D.out[k] || 0, want = d[k] || 0;
+    D.out[k] = cur + Math.max(-lim, Math.min(lim, want - cur));
+  }
+  const w = D.w;
+  for (const k of DANCE_CH) o[k] = (o[k] || 0) + D.out[k] * w;
+  o.hipY = (o.hipY || 0) + D.out.hipY * w;
+  frame.squat = (frame.squat || 0) + D.out.squat * w;
+  frame.hipShift = (frame.hipShift || 0) + D.out.hipShift * w;
+  frame.footTap = Math.max(frame.footTap || 0, D.out.footTap * w);
+  // she is dancing: no new fidget or weight shift starts (one that is running finishes)
+  if (w > 0.02) { P.nextFidget = Math.max(P.nextFidget, now + 4); P.nextShift = Math.max(P.nextShift, now + 4); }
 }
 
 // ---- the channels the controller owns ----------------------------------------

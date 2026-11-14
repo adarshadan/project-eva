@@ -35,3 +35,4 @@ pywin32; sys_platform == "win32"
 # Finding text on screen with Windows' own OCR (screen_text.py) -- the first way she looks for things.
 winocr; sys_platform == "win32"
 nvidia-riva-client      # speech recognition with NVIDIA's free recognisers (stt_nvidia.py)
+

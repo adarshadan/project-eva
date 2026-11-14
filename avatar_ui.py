@@ -792,6 +792,14 @@ class AvatarWidget(QWidget):
         self.view.page().runJavaScript(
             "if (window.setWorld) setWorld(" + json.dumps(w) + ");")
 
+    def set_music(self, music: dict):
+        """What the PC is playing (Phase 4): {playing, bpm, phase, energy, low, high}, ~20 times a second
+        while music plays. Numbers only -- no audio ever reaches the page."""
+        import json
+        clean = {k: music.get(k) for k in ("playing", "bpm", "phase", "energy", "low", "high")
+                 if isinstance(music, dict)}
+        self.view.page().runJavaScript("if (window.setMusic) setMusic(" + json.dumps(clean) + ");")
+
     def acknowledge(self):
         """The person spoke to her: a small nod and a smile."""
         self.view.page().runJavaScript("if (window.acknowledge) acknowledge();")
@@ -840,6 +848,8 @@ class AvatarWidget(QWidget):
             f"window.EVA_ATTENTION = {attention}; window.EVA_FOCUS_MODE = {focus_mode};")
         import body_life                      # Phase 3: body life, cloth physics and their tuning
         self.view.page().runJavaScript(body_life.page_flags_js(config))
+        dance = "true" if getattr(config, "EVA_MUSIC_DANCE", True) else "false"
+        self.view.page().runJavaScript(f"window.EVA_MUSIC_DANCE = {dance};")
         self._speaking_sent = None            # a reloaded page has forgotten it
         self._activity_sent = None
         if hasattr(self, "_body"):

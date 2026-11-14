@@ -297,6 +297,33 @@ def install(ctx):
     world_timer.start(int(1000 / max(1, config.EVA_WORLD_HZ)))
     app._eva_world_timer = world_timer
 
+    # ---- music (Phase 4): the PC's sound analysed on a background thread --------------------
+    # The listener thread captures and analyses (numbers only, nothing recorded); this GUI-thread
+    # timer just reads its latest state and tells the page. While nothing plays, only the change
+    # to "stopped" is sent -- the page treats silence from Python as stopped anyway.
+    import music
+
+    music_listener = music.MusicListener()
+    if config.EVA_MUSIC and music_listener.start():
+        sent = {"playing": False}
+
+        def music_tick():
+            try:
+                st = music_listener.latest()
+                if st is None:
+                    return
+                if st["playing"] or sent["playing"]:
+                    avatar.set_music(st)
+                sent["playing"] = bool(st["playing"])
+            except Exception:
+                log.exception("music state failed")
+
+        music_timer = QTimer()
+        music_timer.timeout.connect(music_tick)
+        music_timer.start(int(1000 / max(1, config.EVA_MUSIC_HZ)))
+        app._eva_music_timer = music_timer
+        app._eva_music_listener = music_listener
+
     # Predictive help (predictive.py): offers what the person usually opens at this
     # time. Off unless switched on (tray > Settings > Initiative); never money.
     import predictive

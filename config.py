@@ -113,6 +113,12 @@ EVA_CLOTH_PHYSICS = True
 EVA_CLOTH_STIFFNESS = 0.85
 EVA_CLOTH_DRAG = 0.9
 EVA_CLOTH_BREEZE = 1.0
+# Phase 4 music (2026-11-14): she listens to what the PC plays (WASAPI loopback -- the speakers, never
+# the microphone; needs PyAudioWPatch, otherwise the feature is simply off) and dances to the beat when
+# music plays and the person is not focused. Audio is analysed in memory only: never recorded or sent.
+EVA_MUSIC = True
+EVA_MUSIC_HZ = 20
+EVA_MUSIC_DANCE = True
 # Bored for a while with the person around: she looks around the PC (disk, old downloads, memory
 # and CPU hogs, Recycle Bin, open windows, battery) and OFFERS one fix. Never acts on her own.
 PATROL = True
