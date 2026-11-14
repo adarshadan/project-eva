@@ -51,7 +51,15 @@ def install(ctx):
         def state(self):
             b = avatar.body()
             return {"sitting": b["sitting"], "airborne": b["airborne"], "perched_on": b["perched_on"],
-                    "walking": avatar._walk_target is not None or b["held"], "placed": b.get("placed", False)}
+                    "walking": avatar._walk_target is not None or b["held"], "placed": b.get("placed", False),
+                    "held": b["held"]}
+
+        # ---- Phase 2 (drive_guard.DriveExecutor): her own moves, always vetted first ----------------
+        def walk_to(self, x_centre, speed):
+            avatar.walk_to(int(x_centre), QApplication.primaryScreen().availableGeometry().bottom(), speed=int(speed))
+
+        def halt(self):
+            avatar.halt_walk()
 
         def look_at(self, x, y, ms):
             pass            # the page's presence layer follows the cursor itself (attention_tick below)
@@ -284,11 +292,14 @@ def install(ctx):
 
     sensor = world_sensor.WorldSensor(WorldProbes())
 
+    latest = {"world": None}
+
     def world_tick():
         if not config.EVA_WORLD:
             return
         try:
-            avatar.set_world(sensor.sample())
+            latest["world"] = sensor.sample()
+            avatar.set_world(latest["world"])
         except Exception:
             log.exception("world sample failed")
 
@@ -296,6 +307,71 @@ def install(ctx):
     world_timer.timeout.connect(world_tick)
     world_timer.start(int(1000 / max(1, config.EVA_WORLD_HZ)))
     app._eva_world_timer = world_timer
+
+    # ---- inner state and choosing what to do (Phase 2) -----------------------------------------
+    # The page owns the drives and the choice; anything that must move her window arrives as an intent
+    # (wander / sit / corner). drive_guard re-checks every rule against the real cursor, the foreground
+    # window and her body, then uses the existing walk / sit. With drives on, the scripted idle picks in
+    # life.py are retired so the two systems never fight.
+    import drive_guard
+
+    eva_life.drives = bool(config.EVA_DRIVES and config.EVA_WORLD)
+
+    class DriveProbes:
+        def cursor(self):
+            p = _QCursor.pos()
+            return p.x(), p.y()
+
+        def work_rect(self):
+            w = (latest["world"] or {}).get("window") or {}
+            r = w.get("rect")
+            return tuple(r) if r else None
+
+        def eva_rect(self):
+            g = avatar.geometry()
+            return g.left(), g.top(), g.right(), g.bottom()
+
+        def ground(self):
+            return QApplication.primaryScreen().availableGeometry().bottom()
+
+        def screen_rect(self):
+            g = QApplication.primaryScreen().geometry()
+            return g.left(), g.top(), g.right(), g.bottom()
+
+        def focus(self):
+            return bool((latest["world"] or {}).get("focus"))
+
+        def busy(self):
+            return LifeProbes().busy()
+
+        def napping(self):
+            return eva_life.napping
+
+    drive_exec = drive_guard.DriveExecutor(BodyFacade(), DriveProbes(), clear=config.EVA_DRIVE_CLEAR_PX)
+
+    def drives_got(items):
+        for it in items[:4]:
+            try:
+                res = drive_exec.handle(it)
+                if not res["ok"]:
+                    log.info(f"Drive intent {it.get('kind')} refused: {res['reason']}")
+                avatar.drive_result(res)
+            except Exception:
+                log.exception("drive intent failed")
+
+    def drives_tick():
+        if not (config.EVA_DRIVES and config.EVA_WORLD):
+            return
+        try:
+            drive_exec.guard_walk()
+            avatar.poll_drive_intents(drives_got)
+        except Exception:
+            log.exception("drives tick failed")
+
+    drives_timer = QTimer()
+    drives_timer.timeout.connect(drives_tick)
+    drives_timer.start(250)
+    app._eva_drives_timer = drives_timer
 
     # Predictive help (predictive.py): offers what the person usually opens at this
     # time. Off unless switched on (tray > Settings > Initiative); never money.
@@ -374,4 +450,4 @@ def install(ctx):
     commentary_timer.timeout.connect(commentary_tick)
     commentary_timer.start(5000)
 
-    ctx.timers += [idle_timer, glance_timer, world_timer, suggestion_timer, commentary_timer]
+    ctx.timers += [idle_timer, glance_timer, world_timer, drives_timer, suggestion_timer, commentary_timer]

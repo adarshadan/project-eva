@@ -26,7 +26,7 @@ MODULES = ["config", "logger", "system_tools", "scheduler", "vision",
            "core/agent", "core/runtime", "core/speaker", "core/llm", "core/prompt", "core/results",
            "core/presence_impl", "core/gui", "core/toolset/desktop", "core/toolset/web_files_system",
            "core/toolset/presence",
-           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline", "world_sensor"]
+           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline", "world_sensor", "drive_guard"]
 
 failures = []
 
@@ -6665,6 +6665,152 @@ def the_world_sensor_sees_without_touching():
         assert forbidden not in src, f"world_sensor.py mentions {forbidden}: it must only read"
 
 
+def her_drives_choose_and_keep_clear():
+    """Phase 2: the desktop side of her inner state. Every move the page asks for is vetted again against the
+    real cursor, window and body; focus mode allows only a corner settle; the old scripted idle routines are
+    retired when drives are on and come back when they are off."""
+    import random as _r
+    import config
+    import drive_guard as dg
+    import life
+
+    assert config.EVA_DRIVES is True and config.EVA_DRIVE_CLEAR_PX == 150, "drives default on, 150 px clear"
+
+    class Probes:
+        cur, work = (100, 100), (200, 100, 900, 700)
+        eva, gnd, scr = (1000, 800, 1150, 1080), 1080, (0, 0, 1919, 1079)
+        foc, busy_, nap = False, False, False
+        def cursor(self): return self.cur
+        def work_rect(self): return self.work
+        def eva_rect(self): return self.eva
+        def ground(self): return self.gnd
+        def screen_rect(self): return self.scr
+        def focus(self): return self.foc
+        def busy(self): return self.busy_
+        def napping(self): return self.nap
+
+    class Body:
+        st = {"sitting": False, "airborne": False, "walking": False, "placed": False, "held": False}
+        def __init__(self): self.calls = []
+        def state(self): return dict(self.st)
+        def walk_to(self, x, speed): self.calls.append(("walk_to", x, speed))
+        def sit_here(self): self.calls.append(("sit_here",))
+        def halt(self): self.calls.append(("halt",))
+
+    def run(intent, **over):
+        p, b = Probes(), Body()
+        b.st = dict(Body.st)
+        for k, v in over.items():
+            if k in b.st:
+                b.st[k] = v
+            else:
+                setattr(p, k, v)
+        ex = dg.DriveExecutor(b, p)
+        return ex.handle(intent), b, ex, p
+
+    # a clear spot is walked to, with the centre she asked for
+    res, b, _, _ = run({"id": 1, "kind": "wander", "x": 1500, "speed": 9})
+    assert res == {"id": 1, "ok": True, "reason": "ok"}, res
+    assert b.calls == [("walk_to", 1500.0, 9)], b.calls
+    # near the cursor, in the active window, or on a path that passes either: refused, and she does not move
+    for why, over in (("cursor", {"cur": (1600, 900)}), ("window", {"work": (1300, 300, 1800, 900)})):
+        res, b, _, _ = run({"id": 2, "kind": "wander", "x": 1500, "speed": 8}, **over)
+        assert not res["ok"] and res["reason"] == "too_close" and not b.calls, (why, res)
+    res, b, _, _ = run({"id": 3, "kind": "wander", "x": 1500}, cur=(1300, 950))        # cursor on her path
+    assert not res["ok"] and not b.calls, "a path that passes the cursor must be refused"
+    res, b, _, _ = run({"id": 4, "kind": "wander", "x": 400}, work=(100, 100, 900, 700))  # ends in the window
+    assert not res["ok"] and not b.calls, "ending in the active window must be refused"
+    # leaving a crowded spot is fine (she may move away, never closer)
+    res, b, _, _ = run({"id": 5, "kind": "wander", "x": 1700}, cur=(1050, 700))
+    assert res["ok"], res
+    res, b, _, _ = run({"id": 6, "kind": "wander", "x": 1050}, cur=(1200, 700))        # toward the cursor
+    assert not res["ok"], "she must never walk toward the cursor"
+    # focus mode: only the corner settle
+    for kind in ("wander", "sit"):
+        res, b, _, _ = run({"id": 7, "kind": kind, "x": 1500}, foc=True)
+        assert res["reason"] == "focus_mode" and not b.calls, (kind, res)
+    res, b, _, _ = run({"id": 8, "kind": "corner", "x": 1850}, foc=True)
+    assert res["ok"] and b.calls[0][0] == "walk_to", res
+    # busy, asleep, carried, put there by the person, already walking, not on the ground, bad input
+    for over, why in (({"busy_": True}, "busy"), ({"nap": True}, "napping"), ({"held": True}, "held"),
+                      ({"placed": True}, "placed"), ({"walking": True}, "already_walking"),
+                      ({"eva": (1000, 500, 1150, 780)}, "not_on_ground")):
+        res, b, _, _ = run({"id": 9, "kind": "wander", "x": 1500}, **over)
+        assert res["reason"] == why and not b.calls, (why, res)
+    for bad in ({"kind": "click", "x": 5}, {"id": 1, "kind": "wander"}, {"id": 1, "kind": "wander", "x": "left"}, None, 5):
+        assert not run(bad)[0]["ok"], bad
+    res, b, _, _ = run({"id": 10, "kind": "sit"})
+    assert res["ok"] and b.calls == [("sit_here",)], res
+    res, _, _, _ = run({"id": 11, "kind": "sit"}, sitting=True)
+    assert res["reason"] == "already_sitting", res
+    # a walk the cursor closes in on is stopped where she stands
+    res, b, ex, p = run({"id": 12, "kind": "wander", "x": 1700})
+    assert res["ok"]
+    b.st["walking"] = True
+    p.cur = (1250, 900)
+    assert ex.guard_walk() is True and b.calls[-1] == ("halt",), "she kept walking into the cursor"
+    res, b, ex, p = run({"id": 13, "kind": "wander", "x": 1700})
+    b.st["walking"] = True
+    assert ex.guard_walk() is False, "she stopped for nothing"
+    # the page and Python share one rule: the page's copy of the numbers matches
+    html = open("web/avatar_3d.html", encoding="utf-8").read()
+    assert "EVA_CLEAR_PX = 150" in html and "drive_guard" in html
+    # nothing here acts on a person's windows
+    src = _source("drive_guard")
+    for forbidden in ("SetForegroundWindow", "type_text", "click_coords", "pyautogui", "focus_window", "ctypes"):
+        assert forbidden not in src, f"drive_guard.py mentions {forbidden}: it must only move HER"
+    # old scripted idle routines: retired with drives on, intact with drives off
+    class LBody:
+        st = {"sitting": False, "airborne": False, "perched_on": None, "walking": False}
+        def __init__(self): self.calls = []
+        def __getattr__(self, name): return lambda *a, **k: self.calls.append((name, a, k))
+        def state(self): return dict(self.st)
+        def head(self): return (1000, 800)
+        def size(self): return (100, 190)
+
+    class LProbes:
+        idle, level = 0, 0
+        def idle_seconds(self): return self.idle
+        def busy(self): return False
+        def cursor(self): return (1100, 820)
+        def hour(self): return 14
+        def foreground(self): return 111
+        def ground(self): return 1032
+        def perch_spots(self): return [(111, 300, 200, 1400), (222, 400, 300, 1300)]
+        def boredom(self): return self.level
+    for drives_on in (False, True):
+        body, probes, clock = LBody(), LProbes(), {"t": 0.0}
+        L = life.Life(body, probes, rng=_r.Random(3), clock=lambda: clock["t"])
+        assert L.drives is False, "the class default must keep the old behaviour"
+        L.drives = drives_on
+        for sec in range(0, 1500, 5):                     # a quiet 25 minutes, bored then sleepy
+            clock["t"] = float(sec)
+            probes.idle = 100 + sec if sec < 500 else 100
+            probes.level = 2 if sec > 600 else 0
+            if sec >= 500:
+                probes.idle = 95
+            L.tick()
+        scripted = [c for c in body.calls if c[0] in ("sit_on", "stroll", "gesture", "run_around")]
+        if drives_on:
+            assert not scripted, f"scripted idle routines still ran with drives on: {scripted[:3]}"
+        else:
+            assert scripted, "the old idle routines vanished with drives off"
+    # the welcome wave belongs to the page's selector when drives are on
+    for drives_on in (False, True):
+        body, probes, clock = LBody(), LProbes(), {"t": 0.0}
+        L = life.Life(body, probes, rng=_r.Random(3), clock=lambda: clock["t"])
+        L.drives = drives_on
+        probes.idle = 400
+        L.tick()
+        probes.idle = 0
+        r = L.tick()
+        assert (r == "welcome") == (not drives_on), (drives_on, r)
+    # wired: the flag gates the retirement and the polling
+    wiring = _source_any("eva_app/life.py")
+    assert "eva_life.drives = bool(config.EVA_DRIVES and config.EVA_WORLD)" in wiring and "drive_exec.handle" in wiring
+    assert "poll_drive_intents" in _source_any("avatar_ui.py") and "halt_walk" in _source_any("avatar_ui.py")
+
+
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",
                    animation_follows_the_task),
                   ("the agent drives the activity pose: thinking -> per tool -> idle",
@@ -6757,7 +6903,8 @@ for label, fn in [("the animation pose follows the task (tool and skill both map
                    fixes_from_the_1001_log),
                   ("next level: hearing, second provider, fast reader, coding helper, being shown",
                    next_level_hearing_reader_coder_watch),
-                   ("the world sensor sees without touching windows", the_world_sensor_sees_without_touching)]:
+                   ("the world sensor sees without touching windows", the_world_sensor_sees_without_touching),
+                   ("her drives choose, keep clear, and retire the scripted idle", her_drives_choose_and_keep_clear)]:
     check(label, fn)
 
 print()

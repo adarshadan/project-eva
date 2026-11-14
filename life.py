@@ -60,6 +60,10 @@ class Life:
         self.watching = None                 # hwnd of the video she is watching with you
         self.next_bored_at = 0.0
         self.last_run = -RUN_GAP
+        # Phase 2: when True her drives (web/avatar_3d.html, drive_guard.py) choose what she does with herself,
+        # so the scripted picks below (random stroll/sit/look/stretch, bored moments, the welcome wave) are
+        # retired. Sleeping, watching a video with you and patrol are not idle theatre and stay.
+        self.drives = False
 
     # ---- once a second ------------------------------------------------------------------
     def tick(self):
@@ -83,7 +87,7 @@ class Life:
             if state.get("perched_on") and state["perched_on"] == self.probes.foreground() \
                     and not state.get("placed"):
                 self.body.get_down()
-            if long_away:
+            if long_away and not self.drives:        # with drives on, the page's own selector waves
                 self.body.wave()
                 return "welcome"
             return "returned"
@@ -108,7 +112,18 @@ class Life:
             return "stopped_watching"
 
         level = self._boredom()
-        if level >= 2 and idle < START_AFTER and not self.napping and not state.get("walking") \
+        if self.drives:
+            if level >= 2 and idle < START_AFTER and not self.napping and not state.get("walking") \
+                    and now >= self.next_bored_at:
+                self.next_bored_at = now + self.rng.uniform(*BORED_GAP)
+                try:
+                    due = getattr(self.probes, "patrol_due", None)
+                    if due and due():
+                        self.body.patrol()
+                        return "bored:patrol"
+                except Exception:
+                    pass
+        elif level >= 2 and idle < START_AFTER and not self.napping and not state.get("walking") \
                 and now >= self.next_bored_at:
             if self.next_bored_at == 0.0:            # the first time: wait a gap, do not start at once
                 self.next_bored_at = now + self.rng.uniform(*BORED_GAP) / (level - 1)
@@ -130,7 +145,7 @@ class Life:
             self.body.get_down()                    # nothing to hover for: back to the ground
             return "descend"
 
-        if idle >= START_AFTER and now >= self.next_at and not state.get("walking"):
+        if idle >= START_AFTER and now >= self.next_at and not state.get("walking") and not self.drives:
             self.next_at = now + self.rng.uniform(*BEHAVIOUR_GAP)
             return self._behaviour(state)
         return "quiet"
