@@ -81,9 +81,9 @@ VISION_LOCATE_BUDGET = 60          # seconds for one locate_on_screen, all passe
 REASONING_MAX_SECONDS = 120
 REASONING_MAX_CHARS = 24000
 
-# "low" | "medium" | "high". Raised to "medium" to allow sufficient reasoning
-# tokens for multi-step agentic tasks, arithmetic, tool planning, and disambiguation.
-REASONING_EFFORT = "medium"
+# "low" | "medium" | "high". Set to "low" for fast, responsive voice/chat turns (2-4s latency).
+# Hard tasks (e.g. operator, multi-step planner) dynamically request "medium" when needed.
+REASONING_EFFORT = "low"
 
 IDLE_ANIMATION_START_SECONDS = 90
 IDLE_NAP_SECONDS = 600

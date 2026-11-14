@@ -273,10 +273,9 @@ def _call_model(messages: list[dict], system_prompt: str, tools: list, ref: str 
         top_p=0.95,
         stream=True,
     )
-    if (providers.is_nim(ref) and "minimax" not in ref.lower()) or _CLIENT["c"] is not None:
-        # Nemotron 3 exposes a real reasoning budget (NVIDIA endpoints only -- strict providers
-        # reject unknown fields). Kimi K3 reasoned at length on every turn with no way to dial it
-        # down, the documented cause of the latency seen in every session. Tunable in config.py.
+    if providers.is_nim(ref) or _CLIENT["c"] is not None:
+        # MiniMax and Nemotron on NVIDIA endpoints support granular reasoning budget control.
+        # Tunable in config.py (REASONING_EFFORT).
         kw["extra_body"] = {"reasoning_effort": getattr(_THINK, "effort", None) or config.REASONING_EFFORT}
     if not tools:                         # a plain question (planning): no tool list at all
         kw.pop("tools", None)

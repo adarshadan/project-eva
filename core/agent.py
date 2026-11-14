@@ -430,6 +430,8 @@ class Agent:
         reply, crashed = None, False
         try:
             reply = self._run(should_abort)
+            if reply is None:
+                self.messages.append({"role": "assistant", "content": "[Task was stopped and abandoned by the user]"})
             self._finish_episode(reply)
             self._hand_off(mark_turn, reply)
             return reply
@@ -488,9 +490,17 @@ class Agent:
         for text, mode in said:
             log.info(f"Folded into the running task: {text!r}")
             tl = text.lower()
-            is_neg = any(w in tl for w in ("don't", "do not", "stop", "never", "not ", "wrong", "avoid"))
-            constraint = ("\n[system] CRITICAL NEGATIVE CONSTRAINT: The person explicitly told you to stop or avoid this! "
-                          "You MUST strictly follow this and NEVER perform or repeat the forbidden action.") if is_neg else ""
+            is_stop = any(w in tl for w in ("stop", "cancel", "halt", "forget it", "never mind", "drop it", "abort"))
+            is_neg = any(w in tl for w in ("don't", "do not", "never", "not ", "wrong", "avoid"))
+            if is_stop:
+                constraint = ("\n[system] TASK CANCELLATION: The person explicitly told you to STOP / CANCEL what you are doing! "
+                              "Drop the previous task immediately, do not perform further research or tools on it, do not keep it pending, "
+                              "and focus strictly and only on what they ask now.")
+            elif is_neg:
+                constraint = ("\n[system] CRITICAL NEGATIVE CONSTRAINT: The person explicitly told you to avoid this! "
+                              "You MUST strictly follow this and NEVER perform or repeat the forbidden action.")
+            else:
+                constraint = ""
             self.messages.append({"role": "user", "content": (
                 f"[{mode}, said while you were working] {text}\n[system] This changes or corrects what you are "
                 f"doing: take it into account from now on (it may override your plan). Stop only if they asked you to.{constraint}")})
