@@ -26,7 +26,7 @@ MODULES = ["config", "logger", "system_tools", "scheduler", "vision",
            "core/agent", "core/runtime", "core/speaker", "core/llm", "core/prompt", "core/results",
            "core/presence_impl", "core/gui", "core/toolset/desktop", "core/toolset/web_files_system",
            "core/toolset/presence",
-           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline", "world_sensor", "body_life", "music", "drive_guard"]
+           "avatar_ui", "recorder", "idle_behavior", "overlay_effects", "deadline", "world_sensor", "body_life", "music", "drive_guard", "mind"]
 
 failures = []
 
@@ -6577,7 +6577,8 @@ def the_world_sensor_sees_without_touching():
     probes, clock = FakeProbes(), {"t": 100.0}
     sensor = world_sensor.WorldSensor(probes, clock=lambda: clock["t"])
     w = sensor.sample()
-    assert set(w) == {"t", "cursor", "speed", "window", "keys", "idle", "full", "new", "screen", "eva", "focus"}, w
+    assert set(w) == {"t", "cursor", "speed", "window", "keys", "idle", "full", "new", "screen", "eva", "focus",
+                      "windows", "ground"}, w     # Phase 5 added the compact window list and the taskbar line
     assert set(w["window"]) == {"rect", "kind", "title"}, w["window"]
     assert isinstance(w["t"], float) and isinstance(w["speed"], float)
     assert isinstance(w["keys"], float) and isinstance(w["idle"], float)
@@ -7001,6 +7002,435 @@ def her_drives_choose_and_keep_clear():
     assert "poll_drive_intents" in _source_any("avatar_ui.py") and "halt_walk" in _source_any("avatar_ui.py")
 
 
+def her_windows_and_mind():
+    """Phase 5: windows as surroundings (drive_guard vets perch / lean_wall / peek_edge, the sensor offers a
+    compact title-free window list, she hops down when the window changes) and the mind (rate limit, junk-proof
+    parsing, speaking gate, privacy, never blocks)."""
+    import random
+    import threading
+    import config
+    import drive_guard as dg
+    import mind
+    import world_sensor
+
+    assert config.EVA_WINDOW_PLAY is True and config.EVA_MIND is True and config.EVA_MIND_SPEAK is True
+    assert config.EVA_MIND_MIN_SECONDS == 60, "the mind defaults to one call a minute at most"
+
+    # ---------- the guard -------------------------------------------------------------------------------
+    A = {"id": 11, "rect": (300, 300, 800, 700), "kind": "browser", "active": False}      # a ledge (title bar at y=300)
+    ACT = {"id": 12, "rect": (1200, 150, 1850, 800), "kind": "editor", "active": True}    # what the person works in
+    B = {"id": 13, "rect": (600, 100, 1000, 1079), "kind": "other", "active": False}      # reaches the taskbar: a wall
+
+    class Probes:
+        def __init__(self):
+            self.cur, self.work, self.eva = (1700, 1000), (1200, 150, 1850, 800), (100, 862, 250, 1080)
+            self.gnd, self.scr, self.foc, self.busy_, self.nap = 1080, (0, 0, 1919, 1079), False, False, False
+            self.wins = [dict(A), dict(ACT), dict(B)]
+        def cursor(self): return self.cur
+        def work_rect(self): return self.work
+        def eva_rect(self): return self.eva
+        def ground(self): return self.gnd
+        def screen_rect(self): return self.scr
+        def focus(self): return self.foc
+        def busy(self): return self.busy_
+        def napping(self): return self.nap
+        def windows(self): return [dict(w) for w in self.wins]
+
+    class Body:
+        def __init__(self): self.calls, self.st = [], {"sitting": False, "airborne": False, "walking": False, "placed": False, "held": False}
+        def state(self): return dict(self.st)
+        def walk_to(self, x, speed): self.calls.append(("walk_to", x, speed))
+        def sit_here(self): self.calls.append(("sit_here",))
+        def halt(self): self.calls.append(("halt",))
+        def perch_on(self, x, y, wid): self.calls.append(("perch_on", x, y, wid))
+        def get_down(self): self.calls.append(("get_down",))
+
+    class Clock:
+        t = 100.0
+        def __call__(self): return self.t
+
+    def run(intent, mutate=None, **body_state):
+        p, b, clk = Probes(), Body(), Clock()
+        b.st.update(body_state)
+        if mutate:
+            mutate(p)
+        ex = dg.DriveExecutor(b, p, clock=clk)
+        return ex.handle(intent), b, ex, p, clk
+
+    perch = {"id": 1, "kind": "perch", "wid": 11, "x": 550, "y": 300, "speed": 7}
+    res, b, ex, p, _ = run(perch)
+    assert res == {"id": 1, "ok": True, "reason": "ok"} and b.calls == [("perch_on", 550.0, 300, 11)], (res, b.calls)
+    assert ex.perch and ex.perch["wid"] == 11
+    # the page's own y is not trusted: the guard uses the window's real top edge
+    res, b, *_ = run(dict(perch, y=5))
+    assert res["ok"] and b.calls[0][2] == 300, b.calls
+    # the end of the title bar is kept clear of her feet-span
+    res, b, *_ = run(dict(perch, x=310))
+    assert res["ok"] and b.calls[0][1] == 387.0, b.calls
+    # never the active window: by flag, by an equal rect without the flag, by id
+    res, b, *_ = run({"id": 2, "kind": "perch", "wid": 12, "x": 1500, "y": 150})
+    assert not res["ok"] and res["reason"] == "active_window" and not b.calls, res
+    def unflag(p):
+        for w in p.wins:
+            w["active"] = False
+        p.wins[0]["rect"] = (1201, 151, 1849, 799)                 # window 11 now sits exactly where the active rect is
+    res, b, *_ = run(perch, unflag)
+    assert res["reason"] == "active_window" and not b.calls, res
+    res, b, *_ = run(dict(perch, wid=99))
+    assert res["reason"] == "no_window" and not b.calls, res
+    # the cursor zone: at the spot, and on her path
+    res, b, *_ = run(perch, lambda p: setattr(p, "cur", (560, 200)))
+    assert res["reason"] == "too_close" and not b.calls, res
+    res, b, *_ = run(perch, lambda p: setattr(p, "cur", (400, 900)))
+    assert res["reason"] == "too_close" and not b.calls, "the cursor beside her path must stop her"
+    # close to the active window: refused (a window next to the one the person uses is no ledge)
+    def near_active(p):
+        p.wins[0]["rect"] = (800, 300, 1300, 700)
+    res, b, *_ = run(dict(perch, x=1000), near_active)
+    assert res["reason"] in ("too_close", "active_window") and not b.calls, res
+    # focus mode: never
+    for kind, extra in (("perch", {"x": 550}), ("lean_wall", {"side": "left", "x": 523}), ("peek_edge", {"side": "left", "x": 600})):
+        res, b, *_ = run(dict({"id": 3, "kind": kind, "wid": 13 if kind != "perch" else 11}, **extra), lambda p: setattr(p, "foc", True))
+        assert res["reason"] == "focus_mode" and not b.calls, (kind, res)
+    # busy, napping, held, placed: never
+    for over, why in (({"busy_": True}, "busy"), ({"nap": True}, "napping")):
+        res, b, *_ = run(perch, lambda p, o=over: [setattr(p, k, v) for k, v in o.items()])
+        assert res["reason"] == why, res
+    for st, why in (({"held": True}, "held"), ({"placed": True}, "placed")):
+        res, b, *_ = run(perch, **st)
+        assert res["reason"] == why and not b.calls, res
+    # room above the title bar / too low
+    res, b, *_ = run({"id": 4, "kind": "perch", "wid": 13, "x": 800})              # window B's top is y=100: no head room
+    assert res["reason"] == "no_room", res
+    def low(p): p.wins[0]["rect"] = (300, 1000, 800, 1075)
+    res, b, *_ = run(perch, low)
+    assert not res["ok"], res
+    # walls: lean beside the side, peek at the edge
+    lean = {"id": 5, "kind": "lean_wall", "wid": 13, "side": "left", "x": 0, "speed": 8}
+    res, b, ex, *_ = run(lean)
+    assert res["ok"] and b.calls == [("walk_to", 523.0, 8)], (res, b.calls)
+    res, b, *_ = run({"id": 6, "kind": "peek_edge", "wid": 13, "side": "left", "x": 0, "speed": 8})
+    assert res["ok"] and b.calls == [("walk_to", 600.0, 8)], (res, b.calls)
+    res, b, *_ = run(dict(lean, wid=11))
+    assert res["reason"] == "not_a_wall", res                                     # window A does not reach the taskbar
+    res, b, *_ = run(dict(lean, side="up"))
+    assert not res["ok"], res
+    res, b, *_ = run(dict(lean, wid=12))
+    assert res["reason"] == "active_window", res
+    res, b, *_ = run(lean, lambda p: setattr(p, "cur", (520, 1000)))
+    assert res["reason"] == "too_close" and not b.calls, res
+    for bad in ({"kind": "perch"}, {"kind": "perch", "wid": 11}, {"kind": "perch", "wid": 11, "x": "left"}, {"kind": "lean_wall", "wid": "x"}):
+        assert not run(dict(bad, id=7))[0]["ok"], bad
+    # getting down is never refused (not even in focus mode), unless she is being carried; nothing to do on the ground
+    for kw in ({"sitting": True},):
+        res, b, *_ = run({"id": 8, "kind": "get_down"}, lambda p: setattr(p, "foc", True), **kw)
+        assert res["ok"] and b.calls == [("get_down",)], res
+    res, b, *_ = run({"id": 8, "kind": "get_down"}, held=True, sitting=True)
+    assert res["reason"] == "held" and not b.calls, res
+    res, b, *_ = run({"id": 8, "kind": "get_down"})
+    assert res["reason"] == "on_ground", res
+    # she gets down gracefully when the window changes (checked on each world sample)
+    def perched():
+        res, b, ex, p, clk = run(perch)
+        assert res["ok"]
+        b.calls.clear()
+        b.st["walking"] = True
+        p.eva = (475, 82, 625, 300)
+        return b, ex, p, clk
+    b, ex, p, clk = perched()
+    assert ex.check_perch() is None and not b.calls, "she got down for nothing (still flying up)"
+    b.st.update(walking=False, sitting=True)
+    assert ex.check_perch() is None and not b.calls, "she got down for nothing (settled on the title bar)"
+    p.wins = [w for w in p.wins if w["id"] != 11]
+    assert ex.check_perch() == "window_gone" and b.calls == [("get_down",)] and ex.perch is None, b.calls
+    for why, mut in (("window_moved", lambda p: p.wins[0].update(rect=(330, 340, 830, 740))),
+                     ("window_active", lambda p: p.wins[0].update(active=True)),
+                     ("focus_mode", lambda p: setattr(p, "foc", True)),
+                     ("cursor_close", lambda p: setattr(p, "cur", (560, 330)))):
+        b, ex, p, clk = perched()
+        b.st.update(walking=False, sitting=True)
+        mut(p)
+        assert ex.check_perch() == why and b.calls == [("get_down",)], (why, b.calls)
+        assert ex.check_perch() is None and b.calls == [("get_down",)], "she got down twice"
+    b, ex, p, clk = perched()                                                    # the window closes while she is still flying up
+    p.wins = [w for w in p.wins if w["id"] != 11]
+    assert ex.check_perch() == "window_gone" and b.calls == [("halt",), ("get_down",)], b.calls
+    b, ex, p, clk = perched()                                                    # the person picks her up: she stays as put
+    b.st.update(walking=False, sitting=False, held=True)
+    p.wins = []
+    assert ex.check_perch() is None and not b.calls and ex.perch is None
+    b, ex, p, clk = perched()                                                    # she is no longer up there (grace period over)
+    b.st.update(walking=False, sitting=False)
+    clk.t += 10
+    assert ex.check_perch() is None and ex.perch is None
+    b, ex, p, clk = perched()                                                    # the cursor closes in on her flight
+    p.cur, ex.walking["cursor_gap"] = (500, 200), 500
+    assert ex.guard_walk() is True and b.calls == [("halt",), ("get_down",)], b.calls
+    assert dg.vet_intent({"kind": "perch"}, Probes(), Body())[0] is False
+
+    # ---------- the sensor's window list -----------------------------------------------------------------
+    class SProbes:
+        def __init__(self):
+            self.wins = [(1, "Budget SECRET.xlsx - Excel", (50, 50, 900, 700)), (2, "Zoom Meeting", (1000, 100, 1800, 800)),
+                         (3, "tiny", (10, 10, 60, 40)), (4, "minimised", (-32000, -32000, -31800, -31880)),
+                         (5, "Program Manager", (0, 0, 1920, 1080)), (6, "Mail - Chrome", (100, 600, 700, 1000)),
+                         (7, "hidden one", (300, 300, 900, 900))] + [(20 + i, f"w{i}", (i * 10, 100, i * 10 + 400, 500)) for i in range(12)]
+            self.fg = {"title": "Zoom Meeting", "rect": (1000, 100, 1800, 800), "hwnd": 2}
+        def cursor(self): return (5, 5)
+        def foreground(self): return self.fg
+        def screen(self): return (1920, 1080)
+        def eva_rect(self): return (0, 0, 100, 200)
+        def idle_seconds(self): return 0
+        def typing_rate(self): return 0
+        def windows(self): return list(self.wins)
+        def ground(self): return 1040
+        def hidden(self, hwnd): return hwnd == 7
+    sp = SProbes()
+    s = world_sensor.WorldSensor(sp).sample()
+    wins = s["windows"]
+    assert 1 <= len(wins) <= 8, len(wins)
+    assert wins[0]["id"] == 2 and wins[0]["active"] is True, "the active window comes first, flagged"
+    assert sum(1 for w in wins if w["active"]) == 1
+    ids = {w["id"] for w in wins}
+    assert not ({3, 4, 5, 7} & ids), f"tiny, minimised, full-screen or hidden windows offered: {ids}"
+    assert all(set(w) == {"id", "rect", "kind", "z", "active"} for w in wins), "only rects, ids and a coarse kind"
+    assert s["ground"] == 1040
+    blob = json.dumps(s["windows"])
+    assert "SECRET" not in blob and "Budget" not in blob and "Zoom" not in blob, "a title leaked into the window list"
+    areas = [(w["rect"][2] - w["rect"][0]) * (w["rect"][3] - w["rect"][1]) for w in wins[1:]]
+    assert areas == sorted(areas, reverse=True), "largest first after the active one"
+    # a maximised active window is kept (the guard must know it), a full-screen window that is not active is not
+    sp.fg = {"title": "Program Manager", "rect": (0, 0, 1920, 1080), "hwnd": 5}
+    wins = world_sensor.WorldSensor(sp).sample()["windows"]
+    assert wins[0]["id"] == 5 and wins[0]["active"], wins[0]
+
+    # ---------- the mind -----------------------------------------------------------------------------------
+    class Fake:
+        """An OpenAI-style client that answers from a script and remembers the prompts."""
+        def __init__(self, replies=None, delay=0.0, clock=None):
+            self.replies, self.delay, self.clock = list(replies or []), delay, clock
+            self.prompts, self.times = [], []
+            self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self._create))
+        def _create(self, **kw):
+            self.prompts.append(kw["messages"][0]["content"])
+            self.times.append(self.clock() if self.clock else None)
+            if self.delay:
+                time.sleep(self.delay)
+            r = self.replies[0] if len(self.replies) == 1 else (self.replies.pop(0) if self.replies else "")
+            if isinstance(r, Exception):
+                raise r
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=types.SimpleNamespace(content=r))])
+
+    GOOD = '{"mood": "happy", "intention": "be_playful", "say": "Hello, friend!"}'
+
+    def world(**over):
+        w = {"window": {"kind": "browser", "title": "Quarterly SECRET plan - Chrome", "rect": [1, 1, 5, 5]}, "focus": False,
+             "full": False, "keys": 0, "idle": 20, "windows": [{"id": 1, "rect": [0, 0, 9, 9], "kind": "editor"}],
+             "cursor": [3, 4], "clipboard": "SECRET clipboard", "files": ["C:/secret.txt"]}
+        w.update(over)
+        return w
+
+    def snap(w=None, **kw):
+        kw.setdefault("drives", {"energy": 0.4, "curiosity": 0.8, "boredom": 0.5, "social": 0.7, "focusRespect": 0.1})
+        return mind.snapshot_from(w or world(), hour=21.5, **kw)
+
+    class Log:
+        def __init__(self): self.mood, self.intent, self.said = [], [], []
+        def make(self, clk, **kw):
+            return mind.Mind(self.mood.append, lambda n, t: self.intent.append((n, t)), self.said.append, clock=clk,
+                             rng=random.Random(5), threaded=False, **kw)
+
+    saved = (mind._client, config.EVA_MIND, config.EVA_MIND_SPEAK, config.EVA_MIND_MIN_SECONDS)
+    try:
+        # -- the rate limit: never more than one call a minute, however often events fire; the config cannot lower it
+        for cfg_min in (60, 5):
+            config.EVA_MIND, config.EVA_MIND_SPEAK, config.EVA_MIND_MIN_SECONDS = True, True, cfg_min
+            clk = Clock()
+            clk.t = 0.0
+            fake = Fake([GOOD], clock=clk)
+            mind._client = fake
+            lg = Log()
+            m = lg.make(clk)
+            for i in range(2400):                                   # 40 minutes, a tick per second, events constantly
+                clk.t = float(i)
+                w = world(idle=(300 if i % 7 < 3 else 0), focus=(i % 90 > 45), keys=(30 if i % 5 == 0 else 0))
+                m.step(snap(w, music=(i % 11 < 5)))
+            gaps = [b - a for a, b in zip(fake.times, fake.times[1:])]
+            assert len(fake.times) >= 12, f"events never brought the mind in early ({len(fake.times)} calls)"
+            assert min(gaps) >= 60, f"two mind calls {min(gaps):.0f} s apart (min_seconds={cfg_min})"
+            assert len(fake.times) <= 2400 // 60 + 1, len(fake.times)
+        # no events: the regular rhythm, 60-120 s apart
+        config.EVA_MIND_MIN_SECONDS = 60
+        clk = Clock()
+        fake = Fake([GOOD], clock=clk)
+        mind._client = fake
+        m = Log().make(clk)
+        for i in range(3600):
+            clk.t = float(i)
+            m.step(snap())
+        gaps = [b - a for a, b in zip(fake.times, fake.times[1:])]
+        assert 20 <= len(fake.times) <= 60 and all(60 <= g <= 121 for g in gaps), (len(fake.times), min(gaps), max(gaps))
+        # switched off / busy: no calls at all
+        for off in ("flag", "busy"):
+            config.EVA_MIND = off != "flag"
+            clk = Clock()
+            fake = Fake([GOOD], clock=clk)
+            mind._client = fake
+            m = Log().make(clk)
+            for i in range(600):
+                clk.t = float(i)
+                m.step(snap(busy=(off == "busy")))
+            assert not fake.times, f"the mind called the model ({off})"
+        config.EVA_MIND = True
+
+        # -- junk answers: no crash, no change
+        P = mind.parse_reply
+        ok = P(GOOD)
+        assert ok == {"mood": "happy", "intention": "be_playful", "say": "Hello, friend!"}, ok
+        assert P("Sure! ```json\n" + GOOD + "\n``` hope that helps")["mood"] == "happy"
+        assert P("<think>hmm {not json}</think>" + GOOD)["intention"] == "be_playful"
+        assert P('{"mood": "Happy ", "intention": "Be Playful"}') == {"mood": "happy", "intention": "be_playful", "say": None}
+        for junk in (None, 5, [], "", "no json here", "{bad json", "{{{{{{{{", "}{", "[1, 2]", "[]", '"mood"', "{}", "x" * 50000,
+                     "{" * 3000 + "}" * 3000, '{"mood": 5, "intention": ["be_quiet"], "say": {"a": 1}}',
+                     '{"mood": "zzz", "intention": "conquer_world"}', '{"mood": null}', "\x00\x01{"):
+            assert P(junk) is None, junk
+        r = P('{"mood": "zzz", "intention": "rest"}')
+        assert r == {"mood": None, "intention": "rest", "say": None}, r
+        assert P('{"mood": "calm", "say": "' + "x" * 81 + '"}')["say"] is None, "an over-long line must be dropped"
+        assert P('{"mood": "calm", "say": "' + "x" * 80 + '"}')["say"] == "x" * 80
+        for bad in ("see http://evil.example", "<b>hi</b>", "a\\nb`c`", "", "   "):
+            assert mind.clean_say(bad) is None or "\n" not in mind.clean_say(bad), bad
+        assert mind.clean_say("Line one\nline two") == "Line one line two"
+        junk_client = [Fake([j]) for j in ("blah", "{bad", "{}", '{"mood": 7}')]
+        for jc in junk_client:
+            mind._client = jc
+            clk = Clock()
+            lg = Log()
+            m = lg.make(clk)
+            for i in range(0, 200, 5):
+                clk.t = float(i)
+                m.step(snap())
+            assert jc.prompts and not lg.mood and not lg.intent and not lg.said, "junk changed something"
+        # an error: nothing changes, silent, and the loop rests
+        mind._client = Fake([RuntimeError("boom")])
+        clk, lg = Clock(), Log()
+        m = lg.make(clk)
+        for i in range(0, 300, 5):
+            clk.t = float(i)
+            m.step(snap())
+        assert not lg.mood and not lg.said and m._rest_until > 0, "an error must change nothing and rest the loop"
+        # a good answer is applied through the callbacks, with a ttl
+        mind._client = Fake([GOOD])
+        clk, lg = Clock(), Log()
+        m = lg.make(clk)
+        for i in range(0, 60, 5):
+            clk.t = float(i)
+            m.step(snap())
+        assert lg.mood == ["happy"] and lg.intent == [("be_playful", mind.INTENTION_TTL_S)], (lg.mood, lg.intent)
+
+        # -- speaking: only when nothing says no, and one line per ten minutes
+        def first_call(w, **kw):
+            mind._client = Fake([GOOD])
+            clk, lg = Clock(), Log()
+            m = lg.make(clk)
+            for i in range(0, 90, 5):
+                clk.t = float(i)
+                m.step(snap(w, **kw))
+            return lg, m
+        lg, m = first_call(world())
+        assert lg.said == ["Hello, friend!"], "she should have spoken when nothing forbids it"
+        for why, w, kw in (("focus", world(focus=True), {}), ("full screen", world(full=True), {}),
+                           ("a call", world(window={"kind": "call"}), {}), ("typing", world(keys=45), {}),
+                           ("away", world(idle=4000), {})):
+            lg, m = first_call(w, **kw)
+            assert not lg.said, f"she spoke ({why})"
+            if why != "away":
+                assert lg.mood == ["happy"], f"the mood should still be applied ({why})"
+        lg, m = first_call(world(), busy=True)
+        assert not lg.said and not lg.mood, "busy: no idle thoughts and no speech"
+        assert m.speak_block(snap(busy=True)) == "busy"
+        config.EVA_MIND_SPEAK = False
+        lg, m = first_call(world())
+        assert not lg.said and lg.mood == ["happy"], "EVA_MIND_SPEAK off: mood yes, voice no"
+        config.EVA_MIND_SPEAK = True
+        # ten minutes between lines, counted from the line she actually spoke
+        mind._client = Fake([GOOD])
+        clk, lg = Clock(), Log()
+        m = lg.make(clk)
+        spoke = []
+        for i in range(0, 3600, 5):
+            clk.t = float(i)
+            n = len(lg.said)
+            m.step(snap())
+            if len(lg.said) > n:
+                spoke.append(i)
+        assert 4 <= len(spoke) <= 7, spoke
+        assert all(b - a >= 600 for a, b in zip(spoke, spoke[1:])), f"two lines {min(b - a for a, b in zip(spoke, spoke[1:]))} s apart"
+        # a line is judged when it ARRIVES: she was quiet when the call began, the person started typing meanwhile
+        mind._client = Fake([GOOD], delay=0.3)
+        clk, lg = Clock(), Log()
+        m = mind.Mind(lg.mood.append, lambda n, t: lg.intent.append((n, t)), lg.said.append, clock=clk, rng=random.Random(1))
+        clk.t = 0.0
+        m.step(snap())
+        clk.t = 25.0
+        m.step(snap())
+        deadline = time.time() + 5
+        while m._inflight and time.time() < deadline:
+            time.sleep(0.02)
+        clk.t = 35.0
+        m.step(snap(world(keys=60)))
+        assert lg.mood == ["happy"] and not lg.said, "the line must be dropped when the person is typing at delivery"
+        # the model call never blocks the caller (worker thread)
+        mind._client = Fake([GOOD], delay=0.6)
+        clk = Clock()
+        clk.t = 0.0
+        m = mind.Mind(lambda w: None, lambda n, t: None, lambda s: None, clock=clk, rng=random.Random(2))
+        m.step(snap())
+        clk.t = 25.0
+        t0 = time.time()
+        assert m.step(snap()) is True
+        assert time.time() - t0 < 0.3, "step() waited for the model"
+        deadline = time.time() + 5
+        while m._inflight and time.time() < deadline:
+            time.sleep(0.02)
+        assert threading.active_count() >= 1
+
+        # -- privacy: the summary holds a window KIND and numbers, never a title, clipboard or file name
+        sn = snap()
+        assert set(sn) == {"hour", "weekday", "window_kind", "focus", "full", "keys", "idle", "busy", "music", "drives"}, set(sn)
+        assert sn["window_kind"] == "browser"
+        assert snap(world(window={"kind": "C:\\secret\\file.docx"}))["window_kind"] == "other", "an unknown kind must not pass"
+        fake = Fake([GOOD])
+        mind._client = fake
+        clk = Clock()
+        m = Log().make(clk)
+        m.note("the person came back after about 12 min away", 0.0)
+        for i in range(0, 60, 5):
+            clk.t = float(i)
+            m.step(snap(music=True))
+        assert fake.prompts, "no prompt captured"
+        text = fake.prompts[0]
+        for secret in ("SECRET", "Quarterly", "plan", "Chrome", "clipboard", "secret.txt", "xlsx", ".docx", "1, 1, 5, 5"):
+            assert secret not in text, f"{secret!r} reached the model"
+        body = text.split("Summary:\n", 1)[1].strip().splitlines()
+        assert 6 <= len(body) <= 10, body
+        assert "browsing the web" in text and "evening" in text and "Music is playing" in text and "came back" in text
+        assert "happy" in text and "be_quiet" in text, "the allowed mood words and intentions are offered"
+    finally:
+        mind._client, config.EVA_MIND, config.EVA_MIND_SPEAK, config.EVA_MIND_MIN_SECONDS = saved
+
+    # ---------- wiring --------------------------------------------------------------------------------------
+    wiring = _source("main")
+    assert "mind_mod.Mind(" in wiring and "eva_mind.step(snap)" in wiring and "drive_exec.check_perch()" in wiring
+    assert "def perch_on" in wiring and "set_intention" in _source_any("avatar_ui.py")
+    html = open("web/avatar_3d.html", encoding="utf-8").read()
+    for needle in ("window.setIntention", "EVA_WINDOW_PLAY", "perch:", "lean_wall:", "peek_edge:", "INTENT_BIAS"):
+        assert needle in html, needle
+    msrc = _source("mind")
+    for forbidden in ("SetForegroundWindow", "click_coords", "pyautogui", "type_text", "pyperclip", "ctypes", "walk_to"):
+        assert forbidden not in msrc, f"mind.py mentions {forbidden}: it never moves her or touches a window"
+
+
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",
                    animation_follows_the_task),
                   ("the agent drives the activity pose: thinking -> per tool -> idle",
@@ -7098,7 +7528,9 @@ for label, fn in [("the animation pose follows the task (tool and skill both map
                     the_body_flags_reach_the_page),
                    ("she hears music, not speech, and stays off without the loopback library",
                     she_hears_music_not_speech_and_stays_off_without_the_library),
-                   ("her drives choose, keep clear, and retire the scripted idle", her_drives_choose_and_keep_clear)]:
+                   ("her drives choose, keep clear, and retire the scripted idle", her_drives_choose_and_keep_clear),
+                   ("windows are scenery she never covers, and the mind is rare, polite and private",
+                    her_windows_and_mind)]:
     check(label, fn)
 
 print()

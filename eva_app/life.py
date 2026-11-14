@@ -61,6 +61,10 @@ def install(ctx):
         def halt(self):
             avatar.halt_walk()
 
+        def perch_on(self, x_centre, edge_y, hwnd):
+            """Phase 5: fly to the top edge of a window and sit on it (she rides along; drive_guard watches it)."""
+            avatar.sit_on(int(edge_y), int(x_centre), hwnd)
+
         def look_at(self, x, y, ms):
             pass            # the page's presence layer follows the cursor itself (attention_tick below)
 
@@ -157,6 +161,9 @@ def install(ctx):
             g = QApplication.primaryScreen().geometry()      # the whole monitor, taskbar included
             return g.width(), g.height()
 
+        def ground(self):
+            return QApplication.primaryScreen().availableGeometry().bottom()
+
         def eva_rect(self):
             g = avatar.geometry()
             return g.left(), g.top(), g.right(), g.bottom()
@@ -182,7 +189,22 @@ def install(ctx):
                         rect = self._logical(r.left, r.top, r.right, r.bottom)
                 except Exception:
                     rect = None
-            return {"title": title, "rect": rect}
+            return {"title": title, "rect": rect, "hwnd": handle}
+
+        @staticmethod
+        def hidden(hwnd):
+            """Reads only: minimised or cloaked (UWP windows on other desktops keep a title) -- no scenery."""
+            try:
+                import ctypes
+                u = ctypes.windll.user32
+                if u.IsIconic(ctypes.c_void_p(hwnd)):
+                    return True
+                cloaked = ctypes.c_int(0)
+                ctypes.windll.dwmapi.DwmGetWindowAttribute(ctypes.c_void_p(hwnd), 14, ctypes.byref(cloaked),
+                                                           ctypes.sizeof(cloaked))
+                return bool(cloaked.value)
+            except Exception:
+                return False
 
         def windows(self):
             import pygetwindow as gw
@@ -300,6 +322,7 @@ def install(ctx):
         try:
             latest["world"] = sensor.sample()
             avatar.set_world(latest["world"])
+            perch_watch()
         except Exception:
             log.exception("world sample failed")
 
@@ -375,6 +398,10 @@ def install(ctx):
         def focus(self):
             return bool((latest["world"] or {}).get("focus"))
 
+        def windows(self):
+            """The world sample's compact window list (rects, ids, active flag; no titles)."""
+            return list((latest["world"] or {}).get("windows") or [])
+
         def busy(self):
             return LifeProbes().busy()
 
@@ -382,6 +409,18 @@ def install(ctx):
             return eva_life.napping
 
     drive_exec = drive_guard.DriveExecutor(BodyFacade(), DriveProbes(), clear=config.EVA_DRIVE_CLEAR_PX)
+
+    def perch_watch():
+        """Phase 5: on every world sample, a window she sits on that moved, closed or became active (or a person
+        who starts to concentrate / a cursor that comes close) sends her hopping down to the taskbar."""
+        if not (config.EVA_WINDOW_PLAY and config.EVA_DRIVES):
+            return
+        try:
+            why = drive_exec.check_perch()
+            if why:
+                log.info(f"She hops down from the window she sat on ({why})")
+        except Exception:
+            log.exception("perch check failed")
 
     def drives_got(items):
         for it in items[:4]:
@@ -406,6 +445,48 @@ def install(ctx):
     drives_timer.timeout.connect(drives_tick)
     drives_timer.start(250)
     app._eva_drives_timer = drives_timer
+
+    # ---- the mind (Phase 5, mind.py): a slow loop with the language model ---------------------------------
+    # Every 60-120 s (or on a notable event, never more than once a minute) a small fast model reads a ~10-line
+    # whitelisted summary (no titles, no clipboard, no file names) and answers mood + intention + maybe one line.
+    # The model call is on a worker thread; this timer only feeds it a snapshot and applies what came back (GUI
+    # thread). Mood -> the feeling system; intention -> the page's selector weights; the line is spoken only when
+    # mind.Mind.speak_block allows it. Nothing here moves her body or touches a window.
+    import mind as mind_mod
+
+    drives_seen = {}
+
+    def mind_mood(word):
+        f = getattr(ctx, "feeling", None)
+        if f is not None:
+            f.felt(word)
+
+    def mind_say(text):
+        sp = getattr(ctx, "speaker", None)
+        if sp is not None:
+            sp.say(text)
+        else:
+            avatar.show_text(text)
+
+    eva_mind = mind_mod.Mind(mind_mood, lambda name, ttl: avatar.set_intention(name, ttl), mind_say)
+
+    def mind_tick():
+        if not (config.EVA_MIND and config.EVA_WORLD) or latest["world"] is None:
+            return
+        try:
+            avatar.read_drives(drives_seen.update)
+            listener = getattr(app, "_eva_music_listener", None)
+            music_on = bool(listener is not None and (listener.latest() or {}).get("playing"))
+            snap = mind_mod.snapshot_from(latest["world"], busy=bool(LifeProbes().busy() or eva_life.napping),
+                                          music=music_on, drives=dict(drives_seen))
+            eva_mind.step(snap)
+        except Exception:
+            log.exception("mind tick failed")
+
+    mind_timer = QTimer()
+    mind_timer.timeout.connect(mind_tick)
+    mind_timer.start(5000)
+    app._eva_mind_timer = mind_timer
 
     # Predictive help (predictive.py): offers what the person usually opens at this
     # time. Off unless switched on (tray > Settings > Initiative); never money.
@@ -484,4 +565,4 @@ def install(ctx):
     commentary_timer.timeout.connect(commentary_tick)
     commentary_timer.start(5000)
 
-    ctx.timers += [idle_timer, glance_timer, world_timer, drives_timer, suggestion_timer, commentary_timer]
+    ctx.timers += [idle_timer, glance_timer, world_timer, drives_timer, mind_timer, suggestion_timer, commentary_timer]

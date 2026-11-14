@@ -643,6 +643,19 @@ window.setRunning = function (on) { presence.running = !!on; };
 // All of it is gaze only: she never touches a window.
 // ---------------------------------------------------------------------------
 let world = null;
+// Phase 5: the person's other windows as scenery: [{id, rect, kind, active}], at most 8. Rects and a coarse kind
+// only (the sensor never sends a title). Anything malformed is dropped.
+function cleanWindows(list) {
+  const out = [];
+  if (!Array.isArray(list)) return out;
+  for (const e of list.slice(0, 8)) {
+    if (!e || !Array.isArray(e.rect) || e.rect.length !== 4) continue;
+    const r = e.rect.map(Number);
+    if (r.some((v) => !isFinite(v)) || r[2] - r[0] < 50 || r[3] - r[1] < 50) continue;
+    out.push({ id: e.id, rect: r, kind: typeof e.kind === 'string' ? e.kind.slice(0, 12) : 'other', active: !!e.active });
+  }
+  return out;
+}
 window.setWorld = function (w) {
   try {
     if (!w || !Array.isArray(w.cursor) || !Array.isArray(w.eva)) return;
@@ -656,6 +669,7 @@ window.setWorld = function (w) {
     copy.newSeenAt = (at !== null && (!prev || prev.newAt !== at)) ? receipt : (prev ? prev.newSeenAt : 0);
     if (w.new && Array.isArray(w.new.rect)) copy.newRect = w.new.rect;
     else copy.newRect = prev ? prev.newRect : null;
+    copy.windows = cleanWindows(w.windows);
     world = copy;
   } catch (e) { /* malformed input: leave the last good world alone */ }
 };
@@ -803,7 +817,40 @@ const PERSONALITY = {
   gap: [4, 10],                // seconds between one pick and the next (manager: 2-6 s was too busy)
   novelty: 400,                // a behaviour triple seen in the last N picks is not picked again
   weight: { wander: 1.0, sit: 0.9, lean: 0.8, peek: 0.9, stretch: 0.8, yawn: 0.9, look_around: 1.0,
-            hum_sway: 0.9, check_in: 0.8, wave_return: 1.0, corner_settle: 1.0, stay_still: 1.1 },
+            hum_sway: 0.9, check_in: 0.8, wave_return: 1.0, corner_settle: 1.0, stay_still: 1.1,
+            perch: 0.8, lean_wall: 0.7, peek_edge: 0.7 },
+};
+// Phase 5: the mind's INTENTION (set by Python from the model's answer, expires after a few minutes) multiplies
+// the selector's weights. It only re-weighs what is possible: focus mode and the respect rules still decide first.
+const INTENT_BIAS = {
+  be_quiet:     { wander: 0.35, perch: 0.3, peek_edge: 0.4, hum_sway: 0.3, stay_still: 2.2, sit: 1.8, lean_wall: 1.6,
+                  lean: 1.5, corner_settle: 1.5, stretch: 0.7, check_in: 0.5, look_around: 0.7 },
+  be_playful:   { wander: 1.6, perch: 1.9, peek_edge: 1.7, hum_sway: 1.8, stretch: 1.2, look_around: 1.2, lean: 0.8,
+                  stay_still: 0.4, sit: 0.5, lean_wall: 0.8 },
+  be_curious:   { peek: 1.8, peek_edge: 2.0, look_around: 1.9, wander: 1.3, perch: 1.2, stay_still: 0.6, sit: 0.6 },
+  keep_company: { check_in: 2.5, sit: 1.3, lean_wall: 1.4, perch: 1.3, wander: 0.8, stay_still: 0.7 },
+  rest:         { sit: 2.4, stay_still: 1.8, yawn: 2.2, lean_wall: 1.8, stretch: 1.3, perch: 0.6, wander: 0.3,
+                  hum_sway: 0.3, peek_edge: 0.4 },
+};
+window.setIntention = function (name, ttl) {
+  try {
+    if (typeof name !== 'string' || !Object.prototype.hasOwnProperty.call(INTENT_BIAS, name)) return false;
+    const t = Math.max(20, Math.min(900, +ttl || 240));
+    presence.intent = { name, until: performance.now() / 1000 + t };
+    return true;
+  } catch (e) { return false; }
+};
+const intentBias = (P, name, now) => {
+  const it = P.intent;
+  if (!it || now >= it.until) return 1;
+  const b = INTENT_BIAS[it.name];
+  return (b && b[name]) || 1;
+};
+// her drives, rounded, for the mind's summary (numbers only)
+window.getDrives = function () {
+  const o = {};
+  for (const k of ['energy', 'curiosity', 'boredom', 'social', 'focusRespect']) o[k] = Math.round(drives[k] * 100) / 100;
+  return JSON.stringify(o);
 };
 const drives = { energy: 0.65, curiosity: 0.35, boredom: 0.15, social: 0.2, focusRespect: 0,
                  hourOverride: null, _hour: 12, _hourAt: -1e9, prevIdle: 0, seenNew: 0,
@@ -818,6 +865,8 @@ const DRIVE_EFFECT = {
   look_around: { curiosity: -0.18, boredom: -0.10 }, hum_sway: { boredom: -0.15, energy: -0.01 },
   check_in: { social: -0.20, boredom: -0.05 }, wave_return: { social: -0.25 },
   corner_settle: { energy: 0.05 }, stay_still: { energy: 0.04, boredom: 0.03 },
+  perch: { energy: 0.02, boredom: -0.18, curiosity: -0.06 }, lean_wall: { energy: 0.04, boredom: -0.05 },
+  peek_edge: { curiosity: -0.22, boredom: -0.08 },
 };
 
 function currentHour(now) {
@@ -972,6 +1021,18 @@ const BEHAVIOURS = {
                                     gaze: { yaw: 0, pitch: 0, share: 0.5 } },
     score: () => 0.05 + 1.1 * drives.social * PERSONALITY.traits.friendly,
     dur: (pr) => pr.dur },
+  perch: { kind: 'move',
+    plan: (c) => planPerch(c),
+    score: () => 0.12 + 0.5 * drives.energy * PERSONALITY.traits.playful + 0.3 * drives.boredom + 0.2 * drives.curiosity,
+    dur: (pr) => pr.dist / (pr.speed / 16 * 1000) * 1.15 + 1.6 + pr.dwell },
+  lean_wall: { kind: 'move',
+    plan: (c) => planWall(c, 'lean'),
+    score: () => 0.2 + 0.35 * (1 - drives.energy) + 0.2 * drives.boredom,
+    dur: (pr) => pr.walkT + pr.hold },
+  peek_edge: { kind: 'move',
+    plan: (c) => planWall(c, 'peek'),
+    score: () => 0.1 + 0.9 * drives.curiosity * (0.5 + 0.5 * PERSONALITY.traits.inquisitive) + 0.2 * drives.boredom,
+    dur: (pr) => pr.walkT + pr.hold },
   corner_settle: { kind: 'move', still: true,
     plan: (c) => { if (!c.focus || c.P.cornerDone) return null; const s = cornerSpot(c);
       return s === null ? null : { x: s.x, here: s.here, speed: 6, dist: Math.abs(s.x - c.cx) }; },
@@ -982,6 +1043,63 @@ const BEHAVIOURS = {
     score: (c) => 0.45 + 1.3 * drives.focusRespect + 0.5 * (1 - drives.energy) * PERSONALITY.traits.respectful + (c.focus ? 2 : 0),
     dur: (pr) => pr.dur },
 };
+// ---- Phase 5: windows as surroundings (visual only; Python vets and executes the move) -------------------------
+const _hit = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 3);
+function windowOthers(w) {            // the person's windows she may use: never the active one
+  if (window.EVA_WINDOW_PLAY === false || !Array.isArray(w.windows) || !w.windows.length) return [];
+  const act = w.window && Array.isArray(w.window.rect) ? w.window.rect : null;
+  return w.windows.filter((e) => !e.active && !(act && _hit(e.rect, act)));
+}
+// like spotClear, but strict: also the flagged active windows count, and a maximised one too (what is on top of
+// the work must never be covered by her, and nothing is scenery when a window fills the screen)
+function strictClear(eva, tgt) {
+  if (!spotClear(eva, tgt)) return false;
+  const clear = +window.EVA_CLEAR_PX || 150;
+  const sw = [Math.min(eva[0], tgt[0]), Math.min(eva[1], tgt[1]), Math.max(eva[2], tgt[2]), Math.max(eva[3], tgt[3])];
+  const acts = world.windows.filter((e) => e.active).map((e) => e.rect);
+  const wr = world.window && world.window.rect; if (Array.isArray(wr)) acts.push(wr);
+  for (const a of acts) {
+    if (rectGap(sw, a) >= clear) continue;
+    const s0 = rectGap(eva, a), e0 = rectGap(tgt, a);
+    if (!(s0 < clear && e0 >= clear && rectGap(sw, a) >= s0 - 1)) return false;
+  }
+  return true;
+}
+function planPerch(c) {
+  if (c.quiet || !c.others.length) return null;
+  const h = c.h;
+  const opts = c.others.filter((e) => (e.rect[2] - e.rect[0]) >= 2 * c.halfW + 24 && e.rect[1] - h >= 4 && e.rect[1] <= c.ground - 0.4 * h);
+  if (!opts.length) return null;
+  for (let i = 0; i < 6; i++) {
+    const e = opts[Math.floor(Math.random() * opts.length)], r = e.rect;
+    const x = rnd(r[0] + c.halfW + 12, r[2] - c.halfW - 12);
+    if (!strictClear(c.eva, [x - c.halfW, r[1] - h, x + c.halfW, r[1]])) continue;
+    const dist = Math.hypot(x - c.cx, r[1] - c.eva[3]);
+    return { wid: e.id, x, y: r[1], speed: 7, dist, dwell: rnd(15, 40) };
+  }
+  return null;
+}
+function planWall(c, mode) {          // mode 'lean': beside a window's side; 'peek': at its edge
+  if (c.quiet || !c.others.length) return null;
+  const opts = c.others.filter((e) => e.rect[1] <= c.ground - 0.6 * c.h && e.rect[3] >= c.ground - 0.5 * c.h);
+  if (!opts.length) return null;
+  for (let i = 0; i < 6; i++) {
+    const e = opts[Math.floor(Math.random() * opts.length)], r = e.rect;
+    const side = Math.random() < 0.5 ? 'left' : 'right';
+    const edge = side === 'left' ? r[0] : r[2];
+    const x = mode === 'lean' ? (side === 'left' ? edge - c.halfW - 2 : edge + c.halfW + 2) : edge;
+    if (x - c.halfW < 0 || x + c.halfW > c.W || Math.abs(x - c.cx) < 8) continue;
+    if (!strictClear(c.eva, [x - c.halfW, c.ground - c.h, x + c.halfW, c.ground])) continue;
+    const speed = Math.round(rnd(6, 10)), dist = Math.abs(x - c.cx);
+    const walkT = dist / (speed / 16 * 1000) * 1.15 + 0.7;
+    // lean: toward the wall (the window is on her right when she stands at its left edge); peek: out over the edge
+    const dir = mode === 'lean' ? (side === 'left' ? 1 : -1) : (side === 'left' ? -1 : 1);
+    return { wid: e.id, side, x, speed, dist, walkT, dir, rise: rnd(0.7, 1.1), fall: rnd(0.8, 1.3),
+             hold: mode === 'lean' ? rnd(6, 14) : rnd(3, 6),
+             amp: mode === 'lean' ? rnd(0.08, 0.14) : rnd(0.06, 0.11), tilt: rnd(0.05, 0.10) };
+  }
+  return null;
+}
 const behEnv = (B, now) => smooth((now - B.start) / (B.pr.rise || 0.5)) * smooth((B.end - now) / (B.pr.fall || 0.6));
 
 function startBehaviour(P, name, pr, now) {
@@ -1004,6 +1122,11 @@ function startBehaviour(P, name, pr, now) {
     P.cornerDone = true;
     if (!pr.here) { P.intents.push({ id, kind: 'corner', x: Math.round(pr.x), speed: pr.speed }); B.intentId = id; }
   } else if (name === 'sit') { P.intents.push({ id, kind: 'sit' }); B.intentId = id; }
+  else if (name === 'perch') {
+    P.intents.push({ id, kind: 'perch', wid: pr.wid, x: Math.round(pr.x), y: Math.round(pr.y), speed: pr.speed }); B.intentId = id;
+  } else if (name === 'lean_wall' || name === 'peek_edge') {
+    P.intents.push({ id, kind: name, wid: pr.wid, side: pr.side, x: Math.round(pr.x), speed: pr.speed }); B.intentId = id;
+  }
   if (name === 'wave_return') drives.waved = true;
   return B;
 }
@@ -1013,6 +1136,8 @@ function endBehaviour(P, now, B, ok) {
   if (ok) {
     const fx = DRIVE_EFFECT[B.name] || {};
     for (const k in fx) drives[k] = clamp01(drives[k] + fx[k]);
+    // her time on the title bar is over: down to the taskbar (Python vets it; coming down is never refused)
+    if (B.name === 'perch' && B.intentId) P.intents.push({ id: ++P.driveSeq, kind: 'get_down' });
     return;
   }
   // it did not happen (refused, or no body for it): forget it, and do not try it again for a while
@@ -1046,12 +1171,17 @@ function utilityStep(P, now, dt, idleLike) {
     }
     // a posture behaviour yields (eases out) when she gets busy, or when the person starts to concentrate
     if (B.kind === 'pose' && !B.still && ((focus || !idleLike) && B.end > now + (B.pr.fall || 0.6))) B.end = now + (B.pr.fall || 0.6);
+    // on a title bar or at a wall: when the person starts to concentrate her time there ends (she comes down / eases out)
+    if ((B.name === 'perch' || B.name === 'lean_wall' || B.name === 'peek_edge') && focus && B.end > now + 0.4)
+      B.end = now + (B.name === 'perch' ? 0.3 : (B.pr.fall || 0.8));
     if (now >= B.end) endBehaviour(P, now, B, true);
     return;
   }
   if (P.nextPick === null) { P.nextPick = now + rnd(PERSONALITY.gap[0], PERSONALITY.gap[1]); return; }
   if (now < P.nextPick) return;
-  if (!idleLike || activity !== 'idle' || bodyState.held || walkW > 0.05) { P.nextPick = now + 0.6; return; }
+  // sitting (on the taskbar or a title bar) is a rest, not a trap: she may choose again from there
+  const seated = !!bodyState.sitting && !bodyState.held && !procGesture;
+  if ((!idleLike && !seated) || activity !== 'idle' || bodyState.held || walkW > 0.05) { P.nextPick = now + 0.6; return; }
   if (typeof dance !== 'undefined' && dance.w > 0.2) { P.nextPick = now + 1; return; }   // dancing to music: no other whims
   const eva = Array.isArray(w.eva) ? w.eva : null;
   if (!eva) { P.nextPick = now + 1; return; }
@@ -1060,6 +1190,8 @@ function utilityStep(P, now, dt, idleLike) {
   const c = { P, now, focus, quiet: focus || D.focusRespect > 0.75, sitting: !!bodyState.sitting, eva,
               W: screen[0], H: screen[1], halfW: Math.max(1, (eva[2] - eva[0]) / 2), cx: (eva[0] + eva[2]) / 2,
               win: w.window && Array.isArray(w.window.rect) ? w.window.rect : null };
+  c.h = Math.max(1, eva[3] - eva[1]); c.ground = typeof w.ground === 'number' ? w.ground : eva[3];
+  c.others = windowOthers(w);
   c.crowded = (Array.isArray(w.cursor) && pointGap(w.cursor, eva) < clear) || (!!c.win && rectGap(eva, c.win) < clear);
   const calm = 1 - 0.8 * D.focusRespect;
   const last = P.hist.length ? P.hist[P.hist.length - 1] : '', last2 = P.hist.length > 1 ? P.hist[P.hist.length - 2] : '';
@@ -1071,6 +1203,7 @@ function utilityStep(P, now, dt, idleLike) {
     if (!pr) continue;
     let s = def.score(c, pr) * (PERSONALITY.weight[name] || 1) * (def.still ? 1 : calm);
     if (name === last) s *= PERSONALITY.repeatPenalty;
+    s *= intentBias(P, name, now);
     cands.push({ name, pr, s, seen: last2 !== '' && P.tripleLog.indexOf(last2 + '>' + last + '>' + name) >= 0 });
   }
   if (!cands.length) { P.nextPick = now + 1; return; }
@@ -1088,8 +1221,15 @@ function utilityStep(P, now, dt, idleLike) {
 }
 
 // Posture of the behaviours that are only her body (no clip): eased in and out, so nothing ever snaps.
+const poseEnv = (B, now) => smooth((now - (B.start + B.pr.walkT)) / (B.pr.rise || 0.8)) * smooth((B.end - now) / (B.pr.fall || 0.9));
 function behaviourPose(P, o, now) {
   const B = P.beh;
+  if (B && (B.name === 'lean_wall' || B.name === 'peek_edge')) {    // after she has walked there
+    const pe = poseEnv(B, now), q = B.pr;
+    if (B.name === 'lean_wall') { o.spineZ += q.dir * q.amp * pe; o.headZ += q.dir * q.tilt * pe; o.spineX += 0.02 * pe; }
+    else { o.spineZ += q.dir * q.amp * pe; o.spineX += 0.06 * pe; o.headZ += q.dir * (q.tilt + 0.06) * pe; }
+    return;
+  }
   if (!B || B.kind === 'move' || B.still) return;
   const env = behEnv(B, now), pr = B.pr;
   if (B.name === 'lean') {
@@ -1107,6 +1247,9 @@ function behaviourPose(P, o, now) {
 // where a behaviour wants her to look (only used when nothing more salient has her attention)
 function driveGaze(P, now) {
   const B = P.beh;
+  if (B && B.name === 'peek_edge') {                       // looks out past the edge, then back at the person
+    return { yaw: B.pr.dir * 14, pitch: 2, share: 0.45, env: poseEnv(B, now) };
+  }
   if (!B || !B.pr.gaze || B.still) return null;
   return { yaw: B.pr.gaze.yaw, pitch: B.pr.gaze.pitch, share: B.pr.gaze.share, env: behEnv(B, now) };
 }

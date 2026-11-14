@@ -59,10 +59,13 @@ class WorldSensor:
     """`probes` is read-only and duck-typed (see e.g. eva_app/life.py):
     cursor() -> (x, y), foreground() -> {"title", "rect"}, screen() -> (w, h),
     eva_rect() -> (l, t, r, b), idle_seconds() -> float, typing_rate() -> float,
-    windows() -> [(hwnd, title, (l, t, r, b))]."""
+    windows() -> [(hwnd, title, (l, t, r, b))]; optional hidden(hwnd) -> bool (minimised / cloaked)."""
 
     SCAN_INTERVAL = 0.5        # window enumeration is the only heavy read: 2 Hz
     NEW_TTL = 3.0              # a new-window event stays reportable this long
+    MAX_WINDOWS = 8            # Phase 5: windows offered to the page as affordances
+    KEEP_WINDOWS = 12          # ... chosen from this many topmost valid ones
+    MIN_W, MIN_H = 200, 120
 
     def __init__(self, probes, clock=time.monotonic):
         self._probes = probes
@@ -74,6 +77,7 @@ class WorldSensor:
         self._seen = set()
         self._new = None
         self._new_until = 0.0
+        self._aff = []             # compact window list from the last scan (Phase 5)
 
     # -- defensive readers -------------------------------------------------------------------
     @staticmethod
@@ -92,6 +96,7 @@ class WorldSensor:
         except Exception:
             windows = []
         found = None
+        self._aff = self._affordances(windows)
         for item in windows:
             try:
                 hwnd, _title, rect = item
@@ -112,6 +117,34 @@ class WorldSensor:
         if self._first_scan:
             self._first_scan = False
         return found
+
+    def _affordances(self, windows):
+        """Phase 5: the person's visible top-level windows (the topmost KEEP_WINDOWS valid ones), as rects and a
+        coarse kind only -- never a title. Tiny, minimised, cloaked and off-screen windows are left out. sample()
+        turns this into the compact list the page gets."""
+        hidden = getattr(self._probes, "hidden", None)
+        out = []
+        for z, item in enumerate(windows):
+            try:
+                hwnd, title, rect = item
+                hwnd = int(hwnd)
+            except Exception:
+                continue
+            r = self._tuple4(rect)
+            if r is None:
+                continue
+            w, h = r[2] - r[0], r[3] - r[1]
+            if w < self.MIN_W or h < self.MIN_H or r[0] < -5000 or r[1] < -5000:
+                continue
+            try:
+                if hidden is not None and hidden(hwnd):
+                    continue
+            except Exception:
+                pass
+            out.append({"id": hwnd, "rect": list(r), "kind": classify_title(str(title or "")), "z": z})
+            if len(out) >= self.KEEP_WINDOWS:
+                break
+        return out
 
     def sample(self) -> dict:
         now = float(self._clock())
@@ -168,6 +201,27 @@ class WorldSensor:
         focus_keys = getattr(config, "EVA_FOCUS_TYPING_KEYS_PER_MIN", 120)
         focus = bool(keys > focus_keys or full or kind == "call")
 
+        fg_id = fg.get("hwnd")
+        # The compact list: the active window is always in it (so a maximised one is still known to the guard);
+        # a non-active window that nearly fills the screen is no scenery. At most MAX_WINDOWS, largest first.
+        wins = []
+        for e in self._aff:
+            same = rect is not None and all(abs(a - b) <= 2 for a, b in zip(e["rect"], rect))
+            active = bool(same or (fg_id is not None and e["id"] == fg_id))
+            area = (e["rect"][2] - e["rect"][0]) * (e["rect"][3] - e["rect"][1])
+            if not active and sw > 0 and sh > 0 and area >= 0.95 * sw * sh:
+                continue
+            wins.append({"id": e["id"], "rect": list(e["rect"]), "kind": e["kind"], "z": e["z"],
+                         "active": active, "_area": area})
+        wins.sort(key=lambda e: (not e["active"], -e["_area"]))
+        wins = wins[:self.MAX_WINDOWS]
+        for e in wins:
+            del e["_area"]
+        try:
+            ground = int(self._probes.ground())
+        except Exception:
+            ground = None
+
         return {
             "t": now,
             "cursor": [cx, cy],
@@ -180,4 +234,6 @@ class WorldSensor:
             "screen": [sw, sh],
             "eva": list(eva),
             "focus": focus,
+            "windows": wins,
+            "ground": ground,
         }

@@ -128,6 +128,21 @@ EVA_MUSIC_DANCE = True
 # active window. Moves are visual only: she never clicks, types into or moves a person's window.
 EVA_DRIVES = True
 EVA_DRIVE_CLEAR_PX = 150
+# Phase 5 (2026-11-14): windows as surroundings, and the mind. EVA_WINDOW_PLAY: the person's other windows
+# become scenery -- she may sit on a title bar (never the active window's), lean against a window's side or
+# peek out at its edge; she hops down if the window moves, closes or becomes the active one. Visual only: she
+# never clicks, focuses, moves or resizes a window. EVA_MIND: every 60-120 s (or on a notable event, never more
+# than once per EVA_MIND_MIN_SECONDS, hard minimum 60) a small fast model gets a ~10-line summary (time of day,
+# the KIND of window -- never a title --, focus, idle, music, her drives) and answers with a mood word, an
+# intention that nudges what she chooses for a few minutes, and optionally one short line. EVA_MIND_SPEAK: that
+# line is spoken only when the person is not focused, typing or on a call, she is not busy, at most once per
+# 10 minutes. EVA_MIND_MODEL "" = use READER_MODEL.
+EVA_WINDOW_PLAY = True
+EVA_MIND = True
+EVA_MIND_SPEAK = True
+EVA_MIND_MIN_SECONDS = 60
+EVA_MIND_MODEL = ""
+EVA_MIND_TIMEOUT = 20
 # Bored for a while with the person around: she looks around the PC (disk, old downloads, memory
 # and CPU hogs, Recycle Bin, open windows, battery) and OFFERS one fix. Never acts on her own.
 PATROL = True

@@ -818,6 +818,26 @@ class AvatarWidget(QWidget):
         import json
         self.view.page().runJavaScript("if (window.driveResult) driveResult(" + json.dumps(res) + ");")
 
+    def set_intention(self, name: str, ttl_s: float = 240):
+        """Phase 5: the mind's intention (be_quiet / be_playful / ...). The page re-weighs her behaviour choices for
+        a few minutes; it never moves her body directly."""
+        import json
+        self.view.page().runJavaScript(
+            f"if (window.setIntention) setIntention({json.dumps(str(name))}, {float(ttl_s):.0f});")
+
+    def read_drives(self, callback):
+        """Phase 5: her drives (numbers only) for the mind's summary. callback(dict) runs on the GUI thread."""
+        import json
+
+        def got(raw):
+            try:
+                d = json.loads(raw) if raw else None
+            except Exception:
+                d = None
+            if isinstance(d, dict):
+                callback(d)
+        self.view.page().runJavaScript("window.getDrives ? getDrives() : ''", got)
+
     def halt_walk(self):
         """Stops a walk where she is (a drive walk that the cursor or a window closed in on)."""
         if self._walk_target is None:
@@ -877,6 +897,8 @@ class AvatarWidget(QWidget):
         drives = "true" if getattr(config, "EVA_DRIVES", True) else "false"
         self.view.page().runJavaScript(
             f"window.EVA_DRIVES = {drives}; window.EVA_CLEAR_PX = {int(getattr(config, 'EVA_DRIVE_CLEAR_PX', 150))};")
+        wplay = "true" if getattr(config, "EVA_WINDOW_PLAY", True) else "false"
+        self.view.page().runJavaScript(f"window.EVA_WINDOW_PLAY = {wplay};")
         attention = "true" if getattr(config, "EVA_ATTENTION", True) else "false"
         focus_mode = "true" if getattr(config, "EVA_FOCUS_MODE", True) else "false"
         self.view.page().runJavaScript(

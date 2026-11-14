@@ -48,7 +48,8 @@ function world(seed = 12345) {
                  affect: () => affect, bl, bnoise, BL_NOISE, stridePlant, faceStep, cloth, clothStep, blFollow: _blFollow,
                  bodyLifeApply, setLocomotion: window.setLocomotion,
                  drives, takeDriveIntents: window.takeDriveIntents,
-                 driveResult: window.driveResult, setBodyState: window.setBodyState, BEHAVIOURS };`, ctx);
+                 driveResult: window.driveResult, setBodyState: window.setBodyState, BEHAVIOURS,
+                 setIntention: window.setIntention, getDrives: window.getDrives, intentBias };`, ctx);
   const api = ctx.api;
   let t = 0;
   const frame = (dt = 1 / 30) => {
@@ -830,10 +831,18 @@ function simulate(w, seconds, script, opts) {
     const raw = w.api.takeDriveIntents();
     if (raw) for (const it of JSON.parse(raw)) {
       out.intents.push({ at: ts, it, eva: eva.slice(), payload: last });
+      const h = eva[3] - eva[1];
       if (it.kind === 'sit') { sitting = true; w.api.setBodyState({ sitting: true }); }
-      else {
+      else if (it.kind === 'perch') {                                  // Phase 5: up on the title bar, sitting
+        const half = (eva[2] - eva[0]) / 2;
+        eva = [it.x - half, it.y - h, it.x + half, it.y];
+        sitting = true; w.api.setBodyState({ sitting: true });
+      } else if (it.kind === 'get_down') {
+        eva = [eva[0], 1080 - h, eva[2], 1080];
+        if (sitting) { sitting = false; w.api.setBodyState({ sitting: false }); }
+      } else {
         const half = (eva[2] - eva[0]) / 2, x = Math.max(half, Math.min(1920 - half, it.x));
-        eva = [x - half, eva[1], x + half, eva[3]];
+        eva = [x - half, 1080 - h, x + half, 1080];                    // walking brings her down to the taskbar line
         if (sitting) { sitting = false; w.api.setBodyState({ sitting: false }); }
       }
     }
@@ -980,6 +989,192 @@ check('drives off: no behaviours, no intents, nothing changes (EVA_DRIVES = fals
   const w = world(); w.ctx.window.EVA_DRIVES = false;
   const r = simulate(w, 120, quietScript);
   assert(r.names().length === 0 && r.intents.length === 0, 'she kept choosing behaviours with the flag off');
+});
+
+// ---- Phase 5: windows as surroundings, and the mind's intention --------------------------------------------
+// The world sample now carries the person's other windows ({id, rect, active}); she may perch on a title bar, lean
+// against a window's side or peek at its edge -- never the active one, never in focus mode, never near the cursor.
+const WIN_ACT = { id: 1, rect: [100, 100, 900, 700], active: true, kind: 'editor' };
+const WIN_A = { id: 2, rect: [1000, 450, 1600, 800], active: false, kind: 'browser' };    // a ledge (title bar at y=450)
+const WIN_B = { id: 3, rect: [1650, 200, 1900, 1075], active: false, kind: 'other' };     // reaches the taskbar: a wall
+const NEW5 = ['perch', 'lean_wall', 'peek_edge'];
+const winScript = (extra, wins) => () => Object.assign({ idle: 30, ground: 1080, windows: wins || [WIN_ACT, WIN_A, WIN_B] }, extra || {});
+const EVA5 = { eva: [1200, 700, 1350, 1080] };
+const count5 = (names, set) => names.filter((n) => set.includes(n)).length;
+// Plays Python's part for one queued intent (as simulate() does) in a hand-written loop.
+function play5(m, it, st) {
+  if (it.kind === 'perch') { st.eva = [it.x - 75, it.y - 380, it.x + 75, it.y]; m.api.setBodyState({ sitting: true }); }
+  else if (it.kind === 'get_down') { st.eva = [st.eva[0], 700, st.eva[2], 1080]; m.api.setBodyState({ sitting: false }); }
+  else if (it.kind === 'sit') m.api.setBodyState({ sitting: true });
+  else { st.eva = [it.x - 75, 700, it.x + 75, 1080]; m.api.setBodyState({ sitting: false }); }
+}
+
+check('Phase 5: perch, lean and peek are chosen only when a suitable non-active window exists', () => {
+  // with windows: all three come, each aimed at a window that fits, never the active one
+  const w = world(); w.api.drives.hourOverride = 14;
+  const r = simulate(w, 1500, winScript(), EVA5);
+  const names = r.names();
+  for (const n of NEW5) assert(names.includes(n), `${n} never chosen in 25 minutes (${[...new Set(names)].join(', ')})`);
+  const half = 75;
+  for (const { it } of r.intents) {
+    if (!NEW5.includes(it.kind)) continue;
+    assert(it.wid !== WIN_ACT.id, `${it.kind} aimed at the active window`);
+    if (it.kind === 'perch') {
+      assert(it.wid === WIN_A.id, `perch on window ${it.wid}`);
+      assert(it.y === WIN_A.rect[1], `perch at y=${it.y}, the title bar is ${WIN_A.rect[1]}`);
+      assert(it.x >= WIN_A.rect[0] + half + 12 - 1 && it.x <= WIN_A.rect[2] - half - 12 + 1, `perch at x=${it.x} is off the title bar`);
+    } else {
+      assert(it.wid === WIN_B.id, `${it.kind} at window ${it.wid} (only ${WIN_B.id} reaches the taskbar)`);
+      assert(it.side === 'left', `${it.kind} on the ${it.side}: that side has no room`);
+      const want = it.kind === 'lean_wall' ? WIN_B.rect[0] - half - 2 : WIN_B.rect[0];
+      assert(Math.abs(it.x - want) <= 1, `${it.kind} stands at x=${it.x}, expected ${want}`);
+    }
+  }
+  // every perch is followed by her coming down again
+  const seq = r.intents.map((i) => i.it.kind);
+  let perches = 0;
+  for (let i = 0; i < seq.length; i++) if (seq[i] === 'perch') { perches++; assert(i + 1 >= seq.length || seq[i + 1] === 'get_down', `a perch was not followed by get_down (${seq.slice(i, i + 3)})`); }
+  assert(perches >= 2, 'too few perches to judge');
+  // no suitable window -> none of the three, ever
+  const none = (label, script) => {
+    const x = world(); x.api.drives.hourOverride = 14;
+    const rr = simulate(x, 600, script, EVA5);
+    assert(count5(rr.names(), NEW5) === 0 && !rr.intents.some((i) => NEW5.includes(i.it.kind)), `${label}: a window behaviour was chosen`);
+    assert(rr.names().length > 10, `${label}: she did nothing at all`);
+  };
+  none('no windows at all', () => ({ idle: 30 }));
+  none('only the active window', winScript({}, [WIN_ACT]));
+  none('a window that is too narrow and does not reach the taskbar', winScript({}, [WIN_ACT, { id: 5, rect: [1000, 450, 1100, 800], active: false }]));
+  none('windows that are active-flagged', winScript({}, [WIN_ACT, Object.assign({}, WIN_A, { active: true }), Object.assign({}, WIN_B, { active: true })]));
+  none('the foreground window listed without its flag', winScript({}, [{ id: 1, rect: [100, 100, 900, 700], active: false }]));
+  none('windows too close to the top of the screen for her head', winScript({}, [WIN_ACT, { id: 6, rect: [1000, 200, 1600, 800], active: false }]));
+  // the switch
+  const off = world(); off.ctx.window.EVA_WINDOW_PLAY = false; off.api.drives.hourOverride = 14;
+  const ro = simulate(off, 600, winScript(), EVA5);
+  assert(count5(ro.names(), NEW5) === 0, 'EVA_WINDOW_PLAY = false still produced window behaviours');
+  assert(ro.names().length > 10, 'with the switch off she should still do her ordinary things');
+});
+
+check('Phase 5: never in focus mode; a perch ends at once when the person starts to concentrate', () => {
+  const w = world(); w.api.drives.hourOverride = 14;
+  const r = simulate(w, 400, winScript({ focus: true, keys: 300, idle: 0 }), EVA5);
+  for (const n of r.names()) assert(n === 'corner_settle' || n === 'stay_still', `${n} in focus mode`);
+  assert(!r.intents.some((i) => NEW5.includes(i.it.kind)), 'a window move was queued in focus mode');
+  // she is up on a title bar when the person starts typing fast
+  const m = world(); m.api.drives.hourOverride = 14; const run = stepper(m);
+  const st = { eva: [1200, 700, 1350, 1080] };
+  for (let i = 0; i < 60; i++) run.step();                   // settle from the rest pose first
+  let focus = false, perchedAt = -1, focusAt = -1, downAt = -1, prev = snapshot(m.bones), worst = 0, worstAt = '';
+  for (let i = 0; i < 30 * 1500 && downAt < 0; i++) {
+    if (i % 4 === 0) m.api.setWorld(worldPayload({ eva: st.eva.slice(), idle: focus ? 0 : 30, ground: 1080, windows: [WIN_ACT, WIN_A, WIN_B], focus, keys: focus ? 300 : 0 }));
+    run.step();
+    const raw = m.api.takeDriveIntents();
+    if (raw) for (const it of JSON.parse(raw)) {
+      if (it.kind === 'perch') perchedAt = i;
+      if (it.kind === 'get_down' && focusAt >= 0) downAt = i;
+      play5(m, it, st);
+    }
+    const s = snapshot(m.bones), ms = maxStep(prev, s);
+    if (ms > worst) { worst = ms; worstAt = `frame ${i} (perch ${perchedAt}, focus ${focusAt}) ${Object.keys(s).find((k) => Math.abs(s[k] - prev[k]) === ms)}`; }
+    prev = s;
+    if (perchedAt >= 0 && focusAt < 0 && i > perchedAt + 90) { focus = true; focusAt = i; }
+  }
+  assert(perchedAt >= 0, 'she never perched');
+  assert(downAt >= 0 && downAt - focusAt <= 45, `she stayed up on the title bar after the person started typing (${downAt - focusAt} frames)`);
+  assert(worst <= MAX_PER_FRAME, `coming down snapped ${worst.toFixed(3)} rad at ${worstAt}`);
+});
+
+check('Phase 5: she keeps clear of the cursor and the active window at every window spot (swept path too)', () => {
+  const w = world(); w.api.drives.hourOverride = 14;
+  let cx = 960, cy = 540, seed = 11;
+  const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const script = (t) => { if (Math.floor(t * 8) !== Math.floor((t - 0.125) * 8)) { cx = 100 + rand() * 1720; cy = 100 + rand() * 980; }
+    return { cursor: [Math.round(cx), Math.round(cy)], idle: 30, ground: 1080, windows: [WIN_ACT, WIN_A, WIN_B] }; };
+  const r = simulate(w, 2400, script, EVA5);
+  const mine = r.intents.filter((i) => NEW5.includes(i.it.kind));
+  assert(mine.length >= 6, `too few window moves to judge (${mine.length})`);
+  for (const { it, eva, payload } of mine) {
+    const half = 75, h = 380;
+    const end = it.kind === 'perch' ? [it.x - half, it.y - h, it.x + half, it.y] : [it.x - half, 1080 - h, it.x + half, 1080];
+    const sweep = [Math.min(eva[0], end[0]), Math.min(eva[1], end[1]), Math.max(eva[2], end[2]), Math.max(eva[3], end[3])];
+    for (const [name, gap] of [['cursor', (rc) => gapPoint(payload.cursor, rc)], ['active window', (rc) => gapRect(rc, WIN_ACT.rect)]]) {
+      assert(gap(end) >= 150, `${it.kind}: she ended ${gap(end).toFixed(0)} px from the ${name}`);
+      assert(gap(sweep) >= Math.min(150, gap(eva)) - 1, `${it.kind}: her path closed in on the ${name} (${gap(sweep).toFixed(0)} px, started ${gap(eva).toFixed(0)})`);
+    }
+  }
+});
+
+check('Phase 5: the mind\'s intention measurably changes the behaviour mix, expires, and cannot unlock focus mode', () => {
+  const PLAYFUL = ['wander', 'perch', 'peek_edge', 'hum_sway'], CALM = ['sit', 'stay_still', 'yawn', 'lean_wall'];
+  const mix = (intent) => {
+    let n = 0, play = 0, calm = 0;
+    for (let seed = 1; seed <= 6; seed++) {
+      const x = world(seed); x.api.drives.hourOverride = 14;
+      if (intent) assert(x.api.setIntention(intent, 900) === true, 'a known intention was refused');
+      const names = simulate(x, 400, winScript(), EVA5).names();
+      n += names.length; play += count5(names, PLAYFUL); calm += count5(names, CALM);
+    }
+    return { n, play: play / n, calm: calm / n };
+  };
+  const base = mix(null), playful = mix('be_playful'), rest = mix('rest'), quiet = mix('be_quiet');
+  assert(base.n > 100 && playful.n > 100 && rest.n > 100, 'too few picks to judge');
+  assert(playful.play > 1.2 * base.play && playful.play > 1.4 * rest.play, `be_playful: playful share ${playful.play.toFixed(2)} vs base ${base.play.toFixed(2)}, rest ${rest.play.toFixed(2)}`);
+  assert(rest.calm > 1.2 * base.calm && rest.calm > 1.4 * playful.calm, `rest: calm share ${rest.calm.toFixed(2)} vs base ${base.calm.toFixed(2)}, playful ${playful.calm.toFixed(2)}`);
+  assert(quiet.calm > 1.1 * base.calm && quiet.play < base.play, `be_quiet: calm ${quiet.calm.toFixed(2)} (base ${base.calm.toFixed(2)}), playful ${quiet.play.toFixed(2)} (base ${base.play.toFixed(2)})`);
+  // unknown names, bad types: refused and harmless
+  const x = world();
+  for (const bad of ['conquer_world', '', null, 5, undefined, {}, '__proto__', 'constructor']) assert(x.api.setIntention(bad, 100) === false, `accepted ${String(bad)}`);
+  assert(!x.api.presence.intent, 'a refused intention changed the state');
+  // it expires, and its length is clamped
+  const t0 = x.ctx.performance.now() / 1000;
+  assert(x.api.setIntention('rest', 30) && x.api.intentBias(x.api.presence, 'sit', t0 + 10) > 2, 'the bias is not applied');
+  assert(x.api.intentBias(x.api.presence, 'sit', t0 + 40) === 1, 'the bias did not expire');
+  x.api.setIntention('rest', 1e9);
+  assert(x.api.presence.intent.until - t0 <= 900.5, 'an intention may not last longer than 15 minutes');
+  const dr = JSON.parse(x.api.getDrives());
+  for (const k of ['energy', 'curiosity', 'boredom', 'social', 'focusRespect']) assert(dr[k] >= 0 && dr[k] <= 1, `drive ${k} = ${dr[k]}`);
+  // focus mode still wins over any intention
+  for (const intent of ['be_playful', 'be_curious', 'keep_company']) {
+    const f = world(); f.api.drives.hourOverride = 14; f.api.setIntention(intent, 900);
+    const names = simulate(f, 200, winScript({ focus: true, keys: 300, idle: 0 }), EVA5).names();
+    assert(names.length > 0 && names.every((n) => n === 'corner_settle' || n === 'stay_still'), `${intent} unlocked ${names.filter((n) => n !== 'stay_still' && n !== 'corner_settle')} in focus mode`);
+  }
+});
+
+check('Phase 5: leaning and peeking are eased: no snaps, bounded, and the lean bends her toward the wall', () => {
+  let worst = 0, leans = 0, peeks = 0, maxZ = 0;
+  for (const seed of [3, 4, 5]) {
+    const w = world(seed); w.api.drives.hourOverride = 14;
+    const r = simulate(w, 900, winScript(), EVA5);
+    worst = Math.max(worst, r.worst);
+    leans += r.names().filter((n) => n === 'lean_wall').length; peeks += r.names().filter((n) => n === 'peek_edge').length;
+    for (const e of w.api.presence.behLog) if (NEW5.includes(e.name) && e.pr.amp !== undefined) maxZ = Math.max(maxZ, e.pr.amp + e.pr.tilt);
+  }
+  assert(leans >= 3 && peeks >= 3, `too few leans (${leans}) or peeks (${peeks}) to judge`);
+  assert(worst <= MAX_PER_FRAME, `a bone jumped ${worst.toFixed(3)} rad in one frame`);
+  assert(maxZ < 0.35, `a lean was too deep (${maxZ.toFixed(2)} rad)`);
+  // the lean really bends her toward the wall; it starts only after the walk
+  const w = world(7); w.api.drives.hourOverride = 14; const run = stepper(w);
+  const st = { eva: EVA5.eva.slice() };
+  const feed = (i) => { if (i % 4 === 0) w.api.setWorld(worldPayload({ eva: st.eva.slice(), idle: 30, ground: 1080, windows: [WIN_ACT, WIN_A, WIN_B] })); };
+  let B = null;
+  for (let i = 0; i < 30 * 1500 && !B; i++) {
+    feed(i); run.step();
+    const raw = w.api.takeDriveIntents();
+    if (raw) for (const it of JSON.parse(raw)) { if (it.kind === 'lean_wall') B = w.api.presence.beh; play5(w, it, st); }
+  }
+  assert(B, 'no lean to inspect');
+  const start = w.api.presence.behLog[w.api.presence.behLog.length - 1];
+  assert(start.name === 'lean_wall', 'the log does not end with the lean');
+  const before = w.bones.spine.rotation.z;
+  let atWalk = before;
+  for (let i = 0; i < 30 * (B.pr.walkT + B.pr.rise + 1.5); i++) {
+    feed(i); run.step();
+    if (i === Math.floor(30 * B.pr.walkT * 0.6)) atWalk = w.bones.spine.rotation.z;
+  }
+  const lean = w.bones.spine.rotation.z - before;
+  assert(Math.abs(atWalk - before) < 0.06, `she leaned before arriving (${(atWalk - before).toFixed(3)} rad during the walk)`);
+  assert(B.pr.dir === 1 && lean > 0.02, `leaning at the left edge of a wall should bend her toward it (dir ${B.pr.dir}, spine dz ${lean.toFixed(3)})`);
 });
 
 console.log(failures ? `\n${failures} motion check(s) FAILED` : '\nall motion checks passed');
