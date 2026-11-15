@@ -142,6 +142,10 @@ class Runtime:
     # ---- front lane -------------------------------------------------------------------
     def heard(self, text: str):
         """Called on the mic listener's thread."""
+        text = (text or "").strip()
+        if not text or text in ("<P><N>", "<silence>", "<music>"):
+            log.info(f"Ignoring recogniser noise artifact: {text!r}")
+            return
         log.info(f"Heard: {text!r}")
         # Checked BEFORE the echo filter: a stop is usually said while she talks.
         if is_stop_phrase(text):
@@ -157,7 +161,9 @@ class Runtime:
             return
         if self.speaker.ignoring_mic():
             # Not her words, while she is talking: the person is interrupting.
-            if config.BARGE_IN and len(text.split()) >= 2:
+            # Require >= 3 words for barge-in to avoid dropping speech on 1-2 word noise blips
+            words = text.split()
+            if config.BARGE_IN and (is_stop_phrase(text) or len(words) >= 3):
                 log.info(f"Person spoke over Eva -- stopping speech for: {text!r}")
                 self.speaker.stop()
             else:

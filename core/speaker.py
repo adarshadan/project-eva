@@ -72,9 +72,27 @@ def matches_spoken(heard: str, spoken: list, run: int = 3) -> bool:
             if " " + " ".join(h[i:i + run]) + " " in said_text:
                 for j in range(i, i + run):
                     covered[j] = True
-        return sum(covered) / len(h) >= ECHO_COVERAGE
+        if sum(covered) / len(h) >= ECHO_COVERAGE:
+            return True
     vocab = set(said_words)
-    return len(h) >= 2 and sum(w in vocab for w in h) == len(h)
+    if len(h) >= 2 and sum(w in vocab for w in h) == len(h):
+        return True
+    # Fuzzy match: recognisers often drop or slightly alter words from speaker bleed
+    h_str = " ".join(h)
+    import difflib
+    for sp in spoken:
+        sp_words = _words(sp)
+        if not sp_words:
+            continue
+        sp_str = " ".join(sp_words)
+        if h_str in sp_str or (len(sp_words) >= 3 and sp_str in h_str):
+            return True
+        if difflib.SequenceMatcher(None, h_str, sp_str).ratio() >= 0.70:
+            return True
+    # Overlap check: if >= 75% of heard words are in what she just said
+    if len(h) >= 2 and sum(w in vocab for w in h) / len(h) >= 0.75:
+        return True
+    return False
 
 
 def reading_ms(text: str) -> int:
