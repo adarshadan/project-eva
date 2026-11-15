@@ -332,7 +332,7 @@ import { VRMUtils } from '@pixiv/three-vrm';
 const ANIM_MAP = {
   // asked-for gestures -> the clip that really shows them
   wave: "p_wave", hello: "hello", greeting: "hello", excited: "hello",
-  dance: "spin_pose", spin: "spin_pose", twirl: "twirl", show_off: "twirl",
+  dance: "p_dance_pop", dances: "p_dance_pop", dance_moves: "p_dance_pop", spin: "spin_pose", twirl: "twirl", show_off: "twirl",
   peace: "peace", pose: "model_pose", model_pose: "model_pose", modelpose: "model_pose",
   stretch: "stretch", exercise: "stretch", finger_gun: "finger_gun", shoot: "finger_gun",
   // gestures with no clip -> purpose-built procedural motions
@@ -2191,38 +2191,168 @@ const PROC = {
   // closed sympathetic / shy posture
   p_posture_closed:{ dur: 2.4, rise: 0.6, fall: 0.6, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { chestX: 0.10 * env, spineX: 0.14 * env, headX: 0.15 * env, luaX: 0.32 * env, ruaX: 0.32 * env }, shoulders: 0.14 * env }; } },
   // --- Pop-culture & anime procedural dances (2026-11-15) ---
+  // Pop dance routine: dynamic rhythmic routine combining bounce, arm flairs, and hip groove
+  p_dance_pop:{ dur: 4.2, f: (r, p) => {
+    const ph = p * Math.PI * 8, sw = Math.sin(ph), alt = Math.cos(ph), bnc = Math.abs(sw);
+    return {
+      set: { luaX: 0.38, ruaX: 0.38, llaY: -1.10, rlaY: 1.10, spineX: 0.05 },
+      add: {
+        luaZ: r.luaZ - 0.45 + 0.35 * sw,
+        ruaZ: r.ruaZ + 0.45 + 0.35 * sw,
+        spineZ: 0.16 * sw,
+        spineY: 0.14 * alt,
+        headZ: -0.12 * sw,
+        headY: -0.10 * alt,
+        hipY: 0.030 * bnc
+      }
+    };
+  } },
   // The Floss: rapid swinging arms in opposition to hip sway
-  p_floss:{ dur: 3.6, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, sw = Math.sin(ph), fb = Math.cos(ph * 0.5); return { set: { luaZ: -0.32 + sw * 0.35 * env, ruaZ: 0.32 + sw * 0.35 * env, luaX: fb * 0.20 * env, ruaX: -fb * 0.20 * env, llaY: -0.15 * env, rlaY: 0.15 * env, spineZ: -sw * 0.16 * env, headZ: sw * 0.10 * env } }; } },
-  // Moonwalk: smooth backward glide stance, subtle shoulder/head dip
-  p_dance_moonwalk:{ dur: 3.6, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 6; return { set: { spineX: 0.14 * env, chestX: -0.06 * env, luaX: 0.25 * env, ruaX: 0.25 * env, llaY: -0.60 * env, rlaY: 0.60 * env, luaZ: -0.18 * env, ruaZ: 0.18 * env, headX: 0.08 * env, headY: -0.12 * Math.sin(ph * 0.5) * env }, add: { hipY: 0.015 * Math.abs(Math.sin(ph)) * env } }; } },
+  p_floss:{ dur: 3.6, f: (r, p) => {
+    const ph = p * Math.PI * 8, sw = Math.sin(ph);
+    return {
+      set: { luaX: 0.20 + 0.25 * sw, ruaX: 0.20 - 0.25 * sw, llaY: -0.22, rlaY: 0.22 },
+      add: {
+        luaZ: r.luaZ - 0.35 - 0.35 * sw,
+        ruaZ: r.ruaZ + 0.35 - 0.35 * sw,
+        spineZ: -0.18 * sw,
+        spineY: -0.14 * sw,
+        headZ: 0.10 * sw,
+        hipY: 0.016 * Math.abs(sw)
+      }
+    };
+  } },
+  // Moonwalk: smooth backward glide stance, subtle shoulder/head dip and toe bounce
+  p_dance_moonwalk:{ dur: 3.6, f: (r, p) => {
+    const ph = p * Math.PI * 6, snap = Math.sin(ph);
+    return {
+      set: { spineX: 0.15, chestX: -0.06, headX: 0.12, luaX: 0.25, ruaX: 0.25, luaZ: r.luaZ - 0.22, ruaZ: r.ruaZ + 0.22, llaY: -0.75, rlaY: 0.75 },
+      add: { hipY: 0.022 * Math.abs(snap), headX: 0.06 * snap, spineY: 0.08 * Math.sin(ph * 0.5) }
+    };
+  } },
   // Salsa: lateral hip-spine counter-rotation, high rhythmic partner dance frame
-  p_salsa:{ dur: 4.0, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, hr = Math.sin(ph) * 0.20 * env, hy = Math.cos(ph) * 0.16 * env; return { set: { luaX: 0.32 * env, ruaX: 0.32 * env, luaZ: -0.38 * env + hr * 0.2, ruaZ: 0.38 * env + hr * 0.2, llaY: -0.85 * env, rlaY: 0.85 * env, spineY: hy * 0.8, spineZ: hr * 0.6, headZ: -hr * 0.4, headY: -hy * 0.4 } }; } },
+  p_salsa:{ dur: 4.0, f: (r, p) => {
+    const ph = p * Math.PI * 8, hr = Math.sin(ph), hy = Math.cos(ph);
+    return {
+      set: { luaX: 0.45, ruaX: 0.45, luaZ: r.luaZ - 0.45, ruaZ: r.ruaZ + 0.45, llaY: -1.25, rlaY: 1.25, spineX: -0.04, chestX: -0.08 },
+      add: { spineZ: 0.20 * hr, spineY: 0.18 * hy, headZ: -0.12 * hr, headY: -0.10 * hy, hipY: 0.018 * Math.abs(hr), luaY: -0.12 * hy, ruaY: 0.12 * hy }
+    };
+  } },
   // The Shoot (Hype Dance): one-arm pump hop with slight backward lean
-  p_the_shoot:{ dur: 3.2, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, pump = 0.5 - 0.5 * Math.cos(ph); return { set: { ruaX: (0.35 + pump * 0.30) * env, rlaY: (0.80 + pump * 0.35) * env, ruaZ: 0.20 * env, luaX: 0.20 * env, luaZ: -0.30 * env, llaY: -0.50 * env, headX: pump * 0.08 * env, spineX: pump * 0.06 * env }, add: { hipY: pump * 0.025 * env } }; } },
+  p_the_shoot:{ dur: 3.2, f: (r, p) => {
+    const ph = p * Math.PI * 8, pump = 0.5 - 0.5 * Math.cos(ph);
+    return {
+      set: { ruaX: 0.40, ruaZ: r.ruaZ + 0.25, luaX: 0.20, luaZ: r.luaZ - 0.30, llaY: -0.65 },
+      add: { ruaX: 0.50 * pump, rlaY: 0.85 * pump, hipY: 0.038 * pump, spineX: -0.14 * pump, headX: 0.12 * pump }
+    };
+  } },
   // The Smeeze: rhythmic bouncy shoulder rock with bent arms swinging
-  p_smeeze:{ dur: 3.2, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, sw = Math.sin(ph); return { set: { luaX: 0.30 * env, ruaX: 0.30 * env, luaZ: (-0.26 + sw * 0.20) * env, ruaZ: (0.26 + sw * 0.20) * env, llaY: -0.70 * env, rlaY: 0.70 * env, spineZ: sw * 0.12 * env, headZ: -sw * 0.14 * env }, add: { hipY: Math.abs(Math.sin(ph * 2)) * 0.020 * env } }; } },
-  // The Woah: fluid windup followed by an abrupt locked freeze
-  p_woah:{ dur: 2.6, f: (r, p) => { const env = Math.sin(p * Math.PI), lk = Math.sin(Math.min(1, p * 1.6) * Math.PI * 0.5); return { set: { luaX: 0.45 * lk * env, ruaX: 0.45 * lk * env, luaZ: -0.20 * lk * env, ruaZ: 0.20 * lk * env, llaY: -1.20 * lk * env, rlaY: 1.20 * lk * env, chestX: -0.08 * lk * env, headX: -0.10 * lk * env }, add: { hipY: -0.018 * lk * env } }; } },
+  p_smeeze:{ dur: 3.2, f: (r, p) => {
+    const ph = p * Math.PI * 8, sw = Math.sin(ph);
+    return {
+      set: { luaX: 0.38, ruaX: 0.38, luaZ: r.luaZ - 0.35, ruaZ: r.ruaZ + 0.35, llaY: -1.30, rlaY: 1.30 },
+      add: { spineZ: 0.16 * sw, headZ: -0.18 * sw, luaX: 0.20 * sw, ruaX: -0.20 * sw, hipY: 0.026 * Math.abs(Math.sin(ph * 2)) }
+    };
+  } },
+  // The Woah: fluid windup followed by locked freeze
+  p_woah:{ dur: 2.8, f: (r, p) => {
+    const w = smooth(p / 0.45);
+    const lock = smooth((p - 0.40) / 0.20);
+    return {
+      set: {
+        luaX: 0.30 * w + 0.18 * lock,
+        ruaX: 0.30 * w + 0.18 * lock,
+        luaZ: r.luaZ - 0.25 * w + 0.05 * lock,
+        ruaZ: r.ruaZ + 0.25 * w - 0.05 * lock,
+        llaY: -0.80 * w - 0.65 * lock,
+        rlaY: 0.80 * w + 0.65 * lock,
+        spineX: -0.05 * w + 0.16 * lock,
+        headX: 0.14 * lock
+      },
+      squat: 0.16 * lock,
+      add: { hipY: -0.020 * lock }
+    };
+  } },
   // The Dougie: right hand smoothing hair/temple with smooth lateral groove
-  p_dougie:{ dur: 3.6, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 6, sw = Math.sin(ph); return { set: { ruaX: (0.55 + sw * 0.10) * env, rlaY: (1.25 + sw * 0.10) * env, ruaY: 0.35 * env, luaX: 0.20 * env, luaZ: -0.25 * env, llaY: -0.55 * env, spineY: sw * 0.14 * env, spineZ: sw * 0.10 * env, headZ: -sw * 0.18 * env }, add: { hipY: Math.abs(Math.sin(ph)) * 0.018 * env } }; } },
+  p_dougie:{ dur: 3.6, f: (r, p) => {
+    const ph = p * Math.PI * 6, sw = Math.sin(ph);
+    return {
+      set: { ruaX: 0.95, ruaY: 0.32, ruaZ: r.ruaZ + 0.28, rlaY: 2.20, luaX: 0.22, luaZ: r.luaZ - 0.28, llaY: -0.60 },
+      add: { spineY: 0.18 * sw, spineZ: 0.14 * sw, headZ: -0.16 * sw, hipY: 0.020 * Math.abs(sw) }
+    };
+  } },
   // The CitiRokk: alternating chest pops with rhythmic forearm crosses
-  p_citirokk:{ dur: 3.2, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, bt = Math.sin(ph); return { set: { luaX: 0.35 * env, ruaX: 0.35 * env, llaY: -1.00 * env, rlaY: 1.00 * env, luaZ: -0.16 * env + bt * 0.14 * env, ruaZ: 0.16 * env + bt * 0.14 * env, chestX: Math.abs(bt) * 0.06 * env, headX: -Math.abs(bt) * 0.05 * env }, add: { hipY: Math.abs(bt) * 0.020 * env } }; } },
+  p_citirokk:{ dur: 3.2, f: (r, p) => {
+    const ph = p * Math.PI * 8, bt = Math.sin(ph), pop = Math.abs(bt);
+    return {
+      set: { luaX: 0.45, ruaX: 0.45, luaZ: r.luaZ - 0.30, ruaZ: r.ruaZ + 0.30, llaY: -1.15, rlaY: 1.15 },
+      add: { chestX: 0.14 * pop, headX: -0.08 * pop, luaZ: 0.20 * bt, ruaZ: 0.20 * bt, hipY: 0.024 * pop }
+    };
+  } },
   // The Swagg Bounce: deep swagger hip-hop drop bounce
-  p_swagg_bounce:{ dur: 3.2, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, bnc = Math.pow(Math.abs(Math.sin(ph)), 1.5); return { set: { luaX: 0.36 * env, ruaX: 0.36 * env, llaY: -0.75 * env, rlaY: 0.75 * env, luaZ: -0.20 * env, ruaZ: 0.20 * env, spineX: (0.08 + bnc * 0.06) * env, headX: bnc * 0.07 * env }, add: { hipY: bnc * 0.025 * env } }; } },
+  p_swagg_bounce:{ dur: 3.2, f: (r, p) => {
+    const ph = p * Math.PI * 8, bnc = Math.pow(Math.abs(Math.sin(ph)), 1.5);
+    return {
+      set: { luaX: 0.32, ruaX: 0.32, luaZ: r.luaZ - 0.32, ruaZ: r.ruaZ + 0.32, llaY: -0.90, rlaY: 0.90, spineX: 0.10 },
+      add: { headX: 0.12 * bnc, spineX: 0.08 * bnc, hipY: 0.032 * bnc }, squat: 0.16 * bnc
+    };
+  } },
   // Toosie Slide: right foot / left foot slide with relaxed upper body sway
-  p_toosie_slide:{ dur: 3.8, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 6, sd = Math.sin(ph); return { set: { luaX: 0.16 * env, ruaX: 0.16 * env, luaZ: -0.20 * env, ruaZ: 0.20 * env, llaY: -0.30 * env, rlaY: 0.30 * env, spineZ: sd * 0.14 * env, headZ: -sd * 0.10 * env }, add: { hipY: Math.abs(Math.cos(ph)) * 0.020 * env } }; } },
+  p_toosie_slide:{ dur: 3.8, f: (r, p) => {
+    const ph = p * Math.PI * 6, sd = Math.sin(ph);
+    return {
+      set: { luaX: 0.22, ruaX: 0.22, luaZ: r.luaZ - 0.28, ruaZ: r.ruaZ + 0.28, llaY: -0.50, rlaY: 0.50 },
+      add: { spineZ: 0.18 * sd, spineY: 0.12 * sd, headZ: -0.14 * sd, hipY: 0.020 * Math.abs(Math.cos(ph)) }
+    };
+  } },
   // The Running Man: alternating sprint-pump forearms in place
-  p_running_man:{ dur: 3.2, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, st = Math.sin(ph); return { set: { luaX: (0.35 - st * 0.25) * env, ruaX: (0.35 + st * 0.25) * env, llaY: -0.90 * env, rlaY: 0.90 * env, spineX: 0.08 * env, headX: 0.05 * env }, add: { hipY: Math.abs(st) * 0.022 * env } }; } },
+  p_running_man:{ dur: 3.2, f: (r, p) => {
+    const ph = p * Math.PI * 8, st = Math.sin(ph);
+    return {
+      set: { luaZ: r.luaZ - 0.22, ruaZ: r.ruaZ + 0.22, llaY: -1.25, rlaY: 1.25, spineX: 0.12, headX: 0.06 },
+      add: { luaX: 0.42 - 0.38 * st, ruaX: 0.42 + 0.38 * st, hipY: 0.032 * Math.abs(st) }
+    };
+  } },
   // The Cosby Walk: strut with lateral shoulder rock and rhythmic head roll
-  p_cosby_walk:{ dur: 3.4, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 6, sw = Math.sin(ph); return { set: { luaX: (0.28 - sw * 0.28) * env, ruaX: (0.28 + sw * 0.28) * env, luaZ: -0.30 * env, ruaZ: 0.30 * env, llaY: -0.95 * env, rlaY: 0.95 * env, headZ: sw * 0.18 * env, headY: -sw * 0.14 * env, spineZ: -sw * 0.07 * env }, add: { hipY: Math.abs(sw) * 0.022 * env } }; } },
+  p_cosby_walk:{ dur: 3.4, f: (r, p) => {
+    const ph = p * Math.PI * 6, sw = Math.sin(ph);
+    return {
+      set: { luaZ: r.luaZ - 0.35, ruaZ: r.ruaZ + 0.35, llaY: -1.05, rlaY: 1.05 },
+      add: { luaX: 0.32 - 0.38 * sw, ruaX: 0.32 + 0.38 * sw, headZ: 0.22 * sw, headY: -0.16 * sw, spineZ: -0.12 * sw, hipY: 0.026 * Math.abs(sw) }
+    };
+  } },
   // Get Griddy: B-walk hop rhythm with signature eye-glasses poses
-  p_griddy:{ dur: 3.4, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, bnc = Math.abs(Math.sin(ph)); return { set: { luaX: 0.55 * env, ruaX: 0.55 * env, llaY: -1.35 * env, rlaY: 1.35 * env, luaY: -0.30 * env, ruaY: 0.30 * env, headX: bnc * 0.07 * env, spineX: 0.07 * env }, add: { hipY: bnc * 0.028 * env } }; } },
+  p_griddy:{ dur: 3.4, f: (r, p) => {
+    const ph = p * Math.PI * 8, bnc = Math.abs(Math.sin(ph)), sw = Math.sin(p * Math.PI * 4);
+    return {
+      set: { luaX: 0.85, ruaX: 0.85, luaZ: r.luaZ - 0.18, ruaZ: r.ruaZ + 0.18, llaY: -2.15, rlaY: 2.15, luaY: -0.32, ruaY: 0.32, spineX: 0.08 },
+      add: { headX: 0.10 * bnc, spineZ: 0.10 * sw, hipY: 0.035 * bnc }
+    };
+  } },
   // Best Mates: high-stepping wide arm swinging joy arcs
-  p_best_mates:{ dur: 3.2, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, sw = Math.sin(ph); return { set: { luaX: 0.38 * env, ruaX: 0.38 * env, luaZ: (-0.28 + sw * 0.35) * env, ruaZ: (0.28 + sw * 0.35) * env, llaY: -0.65 * env, rlaY: 0.65 * env, spineX: -0.10 * env, headX: -0.07 * env, spineZ: sw * 0.08 * env }, add: { hipY: Math.abs(sw) * 0.022 * env } }; } },
+  p_best_mates:{ dur: 3.2, f: (r, p) => {
+    const ph = p * Math.PI * 8, sw = Math.sin(ph);
+    return {
+      set: { luaX: 0.32, ruaX: 0.32, llaY: -0.55, rlaY: 0.55, headX: -0.10, chestX: -0.08 },
+      add: { luaZ: r.luaZ - 0.55 + 0.40 * sw, ruaZ: r.ruaZ + 0.55 + 0.40 * sw, spineZ: 0.12 * sw, hipY: 0.035 * Math.abs(sw) }
+    };
+  } },
   // Billy Bounce: rhythmic hip-knee pop bounce with relaxed hands
-  p_billy_bounce:{ dur: 3.2, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, bnc = Math.abs(Math.sin(ph)); return { set: { luaX: (0.30 + bnc * 0.14) * env, ruaX: (0.30 + bnc * 0.14) * env, luaZ: -0.24 * env, ruaZ: 0.24 * env, llaY: -0.70 * env, rlaY: 0.70 * env, spineX: 0.07 * env, headX: bnc * 0.05 * env }, add: { hipY: bnc * 0.025 * env } }; } },
+  p_billy_bounce:{ dur: 3.2, f: (r, p) => {
+    const ph = p * Math.PI * 8, bnc = Math.abs(Math.sin(ph));
+    return {
+      set: { luaX: 0.32, ruaX: 0.32, luaZ: r.luaZ - 0.30, ruaZ: r.ruaZ + 0.30, llaY: -0.85, rlaY: 0.85, spineX: 0.08 },
+      add: { headX: 0.10 * bnc, hipY: 0.032 * bnc }, squat: 0.18 * bnc
+    };
+  } },
   // Orange Justice: wide crossing arm swings with fast hip-torso counter twist
-  p_orange_justice:{ dur: 3.6, f: (r, p) => { const env = Math.sin(p * Math.PI), ph = p * Math.PI * 8, cyc = Math.sin(ph); return { set: { luaX: 0.42 * env, ruaX: 0.42 * env, luaZ: (-0.26 + cyc * 0.35) * env, ruaZ: (0.26 + cyc * 0.35) * env, llaY: -0.75 * env, rlaY: 0.75 * env, spineX: 0.08 * env, spineY: cyc * 0.14 * env, headY: -cyc * 0.16 * env }, add: { hipY: Math.abs(cyc) * 0.024 * env } }; } },
+  p_orange_justice:{ dur: 3.6, f: (r, p) => {
+    const ph = p * Math.PI * 8, cyc = Math.sin(ph), alt = Math.cos(ph);
+    return {
+      set: { luaX: 0.42, ruaX: 0.42, spineX: 0.08 },
+      add: { luaZ: r.luaZ - 0.40 + 0.45 * cyc, ruaZ: r.ruaZ + 0.40 + 0.45 * cyc, llaY: -1.05 + 0.35 * alt, rlaY: 1.05 - 0.35 * alt, spineY: 0.22 * cyc, spineZ: 0.14 * alt, headY: -0.20 * cyc, hipY: 0.032 * Math.abs(cyc) }
+    };
+  } },
 };
 const PROC_DURATIONS = Object.fromEntries(Object.entries(PROC).map(([k, v]) => [k, v.dur]));
 let procGesture = null;   // { name, start, dur }
@@ -2324,7 +2454,8 @@ window.setAvatarState = function (stateName, opts = {}) {
   if (typeof window.setSweatDrop === 'function') window.setSweatDrop(cfg.sweat);
   if (typeof window.setCameraFraming === 'function') window.setCameraFraming(cfg.framing);
 
-  const gesture = (opts && opts.gesture) || cfg.gesture;
+  const victoryGestures = ['p_fist_pump_victory', 'p_the_shoot', 'p_billy_bounce', 'p_best_mates', 'p_dance_pop'];
+  const gesture = (opts && opts.gesture) || (stateName === 'success' ? victoryGestures[Math.floor(Math.random() * victoryGestures.length)] : cfg.gesture);
   if (gesture && typeof playProcedural === 'function') {
     playProcedural(gesture);
   }

@@ -530,6 +530,7 @@ class Agent:
                 return None
             llm.set_abort(abort_check)
             try:
+                self.messages = _sanitize_messages(self.messages)
                 out = llm.call(self.messages, prompt.build(self._context_now()), self.tool_schemas())
             finally:
                 llm.set_abort(None)
@@ -950,32 +951,33 @@ class Agent:
                 continue
             compacted.append(m)
         if dropped:
-            self.messages = compacted
+            self.messages = _sanitize_messages(compacted)
             log.info(f"Compacted {dropped} old tool results out of history "
                      f"({original_len} -> {len(self.messages)} messages).")
+        else:
+            self.messages = compacted
 
-        if len(self.messages) <= MAX_HISTORY_MESSAGES:
-            return
-        user_indices = [i for i, m in enumerate(self.messages) if m.get("role") == "user"]
-        while len(self.messages) > MAX_HISTORY_MESSAGES and len(user_indices) > 1:
-            self.messages = self.messages[user_indices[1]:]
+        if len(self.messages) > MAX_HISTORY_MESSAGES:
             user_indices = [i for i, m in enumerate(self.messages) if m.get("role") == "user"]
-        if len(self.messages) > MAX_HISTORY_MESSAGES and len(user_indices) <= 1:
-            # One user message that spawned dozens of tool rounds: the loop
-            # above cannot help (there is no older turn to drop), so history
-            # grew unbounded from a single turn -- exactly what
-            # MAX_HISTORY_MESSAGES exists to prevent. Drop from the MIDDLE
-            # of the tool sequence, keeping the user message itself and the
-            # most recent rounds, and never splitting a tool_calls message
-            # from its matching tool results.
-            head = self.messages[:user_indices[0] + 1] if user_indices else []
-            tail = self.messages[-(MAX_HISTORY_MESSAGES - len(head) - 1):]
-            while tail and tail[0].get("role") == "tool":
-                tail = tail[1:]      # never start with an orphaned tool result
-            self.messages = head + [{
-                "role": "assistant",
-                "content": "(earlier steps of this task were trimmed to save context)",
-            }] + tail
+            while len(self.messages) > MAX_HISTORY_MESSAGES and len(user_indices) > 1:
+                self.messages = self.messages[user_indices[1]:]
+                user_indices = [i for i, m in enumerate(self.messages) if m.get("role") == "user"]
+            if len(self.messages) > MAX_HISTORY_MESSAGES and len(user_indices) <= 1:
+                # One user message that spawned dozens of tool rounds: the loop
+                # above cannot help (there is no older turn to drop), so history
+                # grew unbounded from a single turn -- exactly what
+                # MAX_HISTORY_MESSAGES exists to prevent. Drop from the MIDDLE
+                # of the tool sequence, keeping the user message itself and the
+                # most recent rounds, and never splitting a tool_calls message
+                # from its matching tool results.
+                head = self.messages[:user_indices[0] + 1] if user_indices else []
+                tail = self.messages[-(MAX_HISTORY_MESSAGES - len(head) - 1):]
+                while tail and tail[0].get("role") == "tool":
+                    tail = tail[1:]      # never start with an orphaned tool result
+                self.messages = head + [{
+                    "role": "assistant",
+                    "content": "(earlier steps of this task were trimmed to save context)",
+                }] + tail
 
         # Invariant: never leave orphaned tool results or unmatched tool_calls
         self.messages = _sanitize_messages(self.messages)

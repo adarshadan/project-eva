@@ -1205,9 +1205,9 @@ check('Anime 3D system: all new procedural anime gestures execute, stay bounded,
   }
 });
 
-check('Anime 3D system: all 16 procedural pop-culture dances execute, stay bounded, and return to rest', () => {
+check('Anime 3D system: all procedural pop-culture dances execute, stay bounded, and return to rest', () => {
   const DANCE_GESTURES = [
-    'p_floss', 'p_dance_moonwalk', 'p_salsa', 'p_the_shoot', 'p_smeeze', 'p_woah',
+    'p_dance_pop', 'p_floss', 'p_dance_moonwalk', 'p_salsa', 'p_the_shoot', 'p_smeeze', 'p_woah',
     'p_dougie', 'p_citirokk', 'p_swagg_bounce', 'p_toosie_slide', 'p_running_man',
     'p_cosby_walk', 'p_griddy', 'p_best_mates', 'p_billy_bounce', 'p_orange_justice'
   ];
