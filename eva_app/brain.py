@@ -115,6 +115,7 @@ def install(ctx):
 
     def on_heard_activity():
         performer.event("heard")          # a glance: she noticed you spoke
+        bridge.fire(lambda: avatar.set_avatar_state("listening"))
         if config.PRESENCE:
             bridge.fire(avatar.acknowledge)   # a small nod and a smile: she heard you
         idle_behavior.touch_input()        # talking to her is activity, not idleness
@@ -160,6 +161,11 @@ def install(ctx):
     def on_task_card(card, final):
         if final:
             history.put_card(card)
+            status = (card or {}).get("status")
+            if status == "done":
+                bridge.fire(lambda: avatar.set_avatar_state("success"))
+            elif status == "failed":
+                bridge.fire(lambda: avatar.set_avatar_state("error"))
             if getattr(ctx, "feeling", None) is not None:
                 ctx.feeling.finished(card)          # done: delight, bigger for a bigger job; failed: oops
         bridge.fire(lambda: avatar.chat_popup.put_card(card))

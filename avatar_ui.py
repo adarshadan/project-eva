@@ -1036,6 +1036,40 @@ class AvatarWidget(QWidget):
     def clear_expression(self):
         self.view.page().runJavaScript("if (window.setExpression) setExpression('', 0);")
 
+    # ---------------- 3D anime avatar motion system (2026-11-15) ----------------
+    def set_avatar_state(self, state: str, options: dict = None):
+        """Unified anime state machine: idle, listening, processing, speaking, success, error, extended_idle."""
+        opts_json = _json.dumps(options or {})
+        self.view.page().runJavaScript(f"if (window.setAvatarState) setAvatarState('{state}', {opts_json});")
+
+    def trigger_wink(self, side: str = "left", duration: float = 0.45):
+        """Playful or acknowledging wink ('left' or 'right')."""
+        self.view.page().runJavaScript(f"if (window.triggerWink) triggerWink('{side}', {float(duration):.2f});")
+
+    def trigger_startled_blink(self):
+        """Rapid micro-flutter blinks on startle or surprise."""
+        self.view.page().runJavaScript("if (window.triggerStartledBlink) triggerStartledBlink();")
+
+    def set_anime_mouth(self, shape: str = "normal", weight: float = 1.0):
+        """Stylized anime mouth: normal, cat (omega), dot, grin."""
+        self.view.page().runJavaScript(f"if (window.setAnimeMouth) setAnimeMouth('{shape}', {float(weight):.2f});")
+
+    def set_catchlight_shimmer(self, active: bool = True):
+        """Eye specular catchlight shimmer/sparkle during excitement."""
+        self.view.page().runJavaScript(f"if (window.setCatchlightShimmer) setCatchlightShimmer({'true' if active else 'false'});")
+
+    def set_blush(self, intensity: float = 0.8):
+        """Cheek blush overlay for praise or embarrassment (0.0 to 1.0)."""
+        self.view.page().runJavaScript(f"if (window.setBlush) setBlush({float(intensity):.2f});")
+
+    def set_sweat_drop(self, visible: bool = True):
+        """Anime sweat drop overlay on temple for difficult tasks or apologies."""
+        self.view.page().runJavaScript(f"if (window.setSweatDrop) setSweatDrop({'true' if visible else 'false'});")
+
+    def set_camera_framing(self, mode: str = "default"):
+        """Camera framing: default, closeup, present."""
+        self.view.page().runJavaScript(f"if (window.setCameraFraming) setCameraFraming('{mode}');")
+
     # ---------------- movement: real on-screen walking ----------------
     def _set_locomotion(self, moving: bool, direction: int, speed_px_s: float = 0):
         self.view.page().runJavaScript(

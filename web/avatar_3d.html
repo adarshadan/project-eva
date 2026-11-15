@@ -78,13 +78,16 @@ const scene = new THREE.Scene();
 const STAGE_PAD_X = 1.6, STAGE_PAD_Y = 1.15;  // MUST match avatar_ui.py's STAGE_PAD_X/Y
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
 let fitTarget = { cx: 0, cy: 0.25, h: 1.6 };  // replaced by fitCameraTo() once a model exists
+let fitTargetBase = { cx: 0, cy: 0.25, h: 1.6 };
+let cameraFramingMode = 'default';
+let currentCamH = 1.6, currentCamCx = 0, currentCamCy = 0.25;
 
 function applyCameraFit() {
-  const u = fitTarget.h / (RENDER_H / STAGE_PAD_Y);  // world units per pixel
+  const u = currentCamH / (RENDER_H / STAGE_PAD_Y);  // world units per pixel
   camera.left = -RENDER_W * u / 2; camera.right = RENDER_W * u / 2;
   camera.top = RENDER_H * u / 2;   camera.bottom = -RENDER_H * u / 2;
-  camera.position.set(fitTarget.cx, fitTarget.cy, 10);
-  camera.lookAt(fitTarget.cx, fitTarget.cy, 0);
+  camera.position.set(currentCamCx, currentCamCy, 10);
+  camera.lookAt(currentCamCx, currentCamCy, 0);
   camera.updateProjectionMatrix();
 }
 
@@ -92,8 +95,10 @@ function fitCameraTo(object3d) {
   object3d.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(object3d);
   if (box.isEmpty()) return;
-  fitTarget = { cx: (box.min.x + box.max.x) / 2, cy: (box.min.y + box.max.y) / 2,
-                h: box.max.y - box.min.y };
+  fitTargetBase = { cx: (box.min.x + box.max.x) / 2, cy: (box.min.y + box.max.y) / 2,
+                    h: box.max.y - box.min.y };
+  fitTarget = { cx: fitTargetBase.cx, cy: fitTargetBase.cy, h: fitTargetBase.h };
+  currentCamH = fitTarget.h; currentCamCx = fitTarget.cx; currentCamCy = fitTarget.cy;
   applyCameraFit();
 }
 applyCameraFit();
@@ -343,6 +348,28 @@ const ANIM_MAP = {
   shoo: "p_shoo", rewind: "p_rewind", checklist: "p_checklist",
   // desktop work -> a motion that means the action
   click: "p_reach_r", tidy: "p_tidy", arrange: "p_arrange", work: "p_type", delegate: "p_delegate",
+  // specialized anime motions (2026-11-15: unified anime motion system)
+  nod_double: "p_nod_double", double_nod: "p_nod_double", nod_enthusiastic: "p_nod_double",
+  nod_solemn: "p_nod_solemn", deep_nod: "p_nod_solemn",
+  tilt: "p_tilt", curious_tilt: "p_tilt", head_tilt: "p_tilt", kubikashige: "p_tilt",
+  look_away: "p_look_away", retrieval: "p_look_away",
+  jolt: "p_jolt", double_take: "p_jolt", recoil: "p_jolt",
+  lean_in: "p_lean_in",
+  hands_behind_back: "p_hands_behind_back", polite_stand: "p_hands_behind_back",
+  crossed_arms: "p_crossed_arms", arms_crossed: "p_crossed_arms", confident: "p_crossed_arms",
+  finger_chin: "p_finger_chin", pondering: "p_finger_chin",
+  victory: "p_fist_pump_victory", fist_pump_victory: "p_fist_pump_victory",
+  hand_mouth: "p_hand_mouth", gasp: "p_hand_mouth", giggle: "p_hand_mouth",
+  iconic_size: "p_iconic_size", size_gesture: "p_iconic_size",
+  iconic_growth: "p_iconic_growth", growth_gesture: "p_iconic_growth",
+  wave_gentle: "p_wave_gentle", subtle_wave: "p_wave_gentle",
+  deictic_point: "p_deictic_point", present_ui: "p_deictic_point",
+  bow_eshaku: "p_bow_eshaku", greet_bow: "p_bow_eshaku",
+  bow_keirei: "p_bow_keirei", respect_bow: "p_bow_keirei",
+  bow_saikeirei: "p_bow_saikeirei", apology_bow: "p_bow_saikeirei",
+  startle: "p_micro_startle", micro_startle: "p_micro_startle",
+  posture_open: "p_posture_open", chest_open: "p_posture_open",
+  posture_closed: "p_posture_closed",
   // held states, driven by the activity controller
   fly_loop: "__procedural_hover", nap: "__procedural_nap",
 };
@@ -380,6 +407,22 @@ let vrmGestureActive = false;
 const EXPRESSION_ALIASES = {
   Surprised: ['surprised', 'Surprised'],
   Sad: ['sad', 'sorrow', 'Sad'],
+  Joy: ['joy', 'happy', 'Joy', 'Happy'],
+  Angry: ['angry', 'Angry'],
+  Relaxed: ['relaxed', 'Relaxed'],
+  Blink: ['blink', 'Blink'],
+  BlinkLeft: ['blinkLeft', 'blink_l', 'Blink_L', 'blinkleft'],
+  BlinkRight: ['blinkRight', 'blink_r', 'Blink_R', 'blinkright'],
+  Wink: ['blinkLeft', 'blink_l', 'Blink_L'],
+  Squint: ['happy', 'relaxed', 'squint', 'eye_smile'],
+  Aa: ['aa', 'A', 'a', 'ah'],
+  Ih: ['ih', 'I', 'i', 'ee'],
+  Ou: ['ou', 'U', 'u', 'oo'],
+  Ee: ['ee', 'E', 'e'],
+  Oh: ['oh', 'O', 'o'],
+  CatMouth: ['omega', 'wavy', 'cat_mouth', 'mouth_w'],
+  DotMouth: ['small_o', 'dot_mouth', 'oh', 'O'],
+  Grin: ['joy', 'happy', 'mouth_smile'],
 };
 
 function setExpression(name, weight) {
@@ -410,6 +453,74 @@ function setExpression(name, weight) {
 }
 window.setExpression = setExpression;
 
+let blushMeshLeft = null, blushMeshRight = null;
+let sweatDropSprite = null;
+
+function setupAnimeOverlays(vrm) {
+  if (!vrm || !vrm.humanoid) return;
+  const headNode = vrm.humanoid.getNormalizedBoneNode('head');
+  if (!headNode || typeof document === 'undefined' || typeof THREE === 'undefined') return;
+
+  try {
+    // 1. Cheek blush texture: soft pink radial gradient
+    const blushCanvas = document.createElement('canvas');
+    blushCanvas.width = 64; blushCanvas.height = 64;
+    const bctx = blushCanvas.getContext('2d');
+    if (bctx) {
+      const grad = bctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+      grad.addColorStop(0, 'rgba(255, 110, 140, 0.75)');
+      grad.addColorStop(0.5, 'rgba(255, 130, 160, 0.45)');
+      grad.addColorStop(1, 'rgba(255, 130, 160, 0)');
+      bctx.fillStyle = grad;
+      bctx.beginPath();
+      bctx.arc(32, 32, 30, 0, Math.PI * 2);
+      bctx.fill();
+
+      const blushTex = new THREE.CanvasTexture(blushCanvas);
+      const blushMat = new THREE.MeshBasicMaterial({
+        map: blushTex, transparent: true, opacity: 0, depthWrite: false
+      });
+      const blushGeo = new THREE.PlaneGeometry(0.045, 0.035);
+
+      blushMeshLeft = new THREE.Mesh(blushGeo, blushMat);
+      blushMeshLeft.position.set(-0.065, -0.02, 0.095);
+      headNode.add(blushMeshLeft);
+
+      blushMeshRight = new THREE.Mesh(blushGeo, blushMat.clone());
+      blushMeshRight.position.set(0.065, -0.02, 0.095);
+      headNode.add(blushMeshRight);
+    }
+
+    // 2. Sweat drop texture: teardrop shape
+    const sweatCanvas = document.createElement('canvas');
+    sweatCanvas.width = 64; sweatCanvas.height = 64;
+    const sctx = sweatCanvas.getContext('2d');
+    if (sctx) {
+      sctx.fillStyle = 'rgba(100, 200, 255, 0.85)';
+      sctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      sctx.lineWidth = 2;
+      sctx.beginPath();
+      sctx.moveTo(32, 10);
+      sctx.bezierCurveTo(45, 30, 52, 45, 32, 58);
+      sctx.bezierCurveTo(12, 45, 19, 30, 32, 10);
+      sctx.closePath();
+      sctx.fill();
+      sctx.stroke();
+
+      const sweatTex = new THREE.CanvasTexture(sweatCanvas);
+      const sweatMat = new THREE.SpriteMaterial({
+        map: sweatTex, transparent: true, opacity: 0, depthWrite: false
+      });
+      sweatDropSprite = new THREE.Sprite(sweatMat);
+      sweatDropSprite.scale.set(0.06, 0.07, 1);
+      sweatDropSprite.position.set(0.11, 0.08, 0.09);
+      headNode.add(sweatDropSprite);
+    }
+  } catch (err) {
+    console.warn('Anime overlays setup skipped:', err);
+  }
+}
+
 (async () => {
   try {
     const loader = new GLTFLoader();
@@ -425,6 +536,7 @@ window.setExpression = setExpression;
       scene.add(vrm.scene);
       fitCameraTo(vrm.scene);  // framing computed from the model's real size
       vrmInstance = vrm;
+      setupAnimeOverlays(vrm);
       { const h = vrm.humanoid.getNormalizedBoneNode('hips'); if (h) restHipsPos = h.position.clone(); }
       usingGltf = true;
       gltfMixer = new THREE.AnimationMixer(vrm.scene);
@@ -531,8 +643,23 @@ const pulse = (p, a, b) => smooth((p - a) / ((b - a) / 2)) * smooth((b - p) / ((
 // ---------------------------------------------------------------------------
 window.EVA_LIFE = true;
 const life = { speaking: false, speakW: 0, mouth: 0, nextBlink: 1.5, blinkStart: -1,
-               doubleBlink: false, gapUntil: 0, nextGap: 1.0 };
+               doubleBlink: false, flutterCount: 0, gapUntil: 0, nextGap: 1.0,
+               wink: null, animeMouth: 'normal', animeMouthW: 0, shimmer: false };
 window.setSpeaking = function (on) { life.speaking = !!on; };
+window.triggerWink = function (side = 'left', dur = 0.45) {
+  life.wink = { side: side === 'right' ? 'right' : 'left', start: performance.now() / 1000,
+                dur: Math.max(0.2, Math.min(1.0, +dur || 0.45)) };
+};
+window.triggerStartledBlink = function () {
+  life.flutterCount = 3; life.blinkStart = performance.now() / 1000;
+};
+window.setAnimeMouth = function (shape = 'normal', weight = 1.0) {
+  life.animeMouth = ['normal', 'cat', 'dot', 'grin'].includes(shape) ? shape : 'normal';
+  life.animeMouthW = Math.max(0, Math.min(1, +weight || 1.0));
+};
+window.setCatchlightShimmer = function (active) {
+  life.shimmer = !!active;
+};
 
 function exprName(em, names) {
   for (const n of names) { if (em.getExpression(n)) return n; }
@@ -547,28 +674,56 @@ function lifeUpdate(t, dt) {
   if (!window.EVA_LIFE || !vrmInstance || !vrmInstance.expressionManager) return;
   const em = vrmInstance.expressionManager;
   try {
-    // -- blink: every 2-6 s, ~0.16 s long, sometimes twice ---------------
+    // -- blink: every 2-6 s, ~0.16 s long, sometimes twice or flutter ----
     if (life.blinkStart < 0 && t >= life.nextBlink) {
       life.blinkStart = t;
       life.doubleBlink = Math.random() < 0.18;
     }
     let blink = 0;
     if (life.blinkStart >= 0) {
-      const a = (t - life.blinkStart) / 0.16;
+      const dur = life.flutterCount > 0 ? 0.09 : 0.16;
+      const a = (t - life.blinkStart) / dur;
       if (a >= 1) {
-        life.blinkStart = -1;
-        life.nextBlink = t + (life.doubleBlink ? 0.18 : 2.2 + Math.random() * 3.8);
-        life.doubleBlink = false;
+        if (life.flutterCount > 1) {
+          life.flutterCount--;
+          life.blinkStart = t;
+        } else {
+          life.flutterCount = 0;
+          life.blinkStart = -1;
+          life.nextBlink = t + (life.doubleBlink ? 0.18 : 2.2 + Math.random() * 3.8);
+          life.doubleBlink = false;
+        }
       } else {
         blink = a < 0.4 ? a / 0.4 : 1 - (a - 0.4) / 0.6;   // quick close, slower open
       }
     }
-    setExpr(em, ['blink', 'Blink'], blink);
 
-    // -- mouth: syllable-like movement while she speaks -------------------
-    // The audio plays in another process, so its loudness is not available;
-    // this is a believable envelope (4-6 syllables/s, uneven, with phrase
-    // pauses), not true lip-sync.
+    // -- wink: single-eye blink override ---------------------------------
+    if (life.wink) {
+      const p = (t - life.wink.start) / life.wink.dur;
+      if (p >= 1) {
+        life.wink = null;
+      } else {
+        const wVal = Math.sin(p * Math.PI);
+        if (life.wink.side === 'left') {
+          setExpr(em, ['blinkLeft', 'blink_l', 'Blink_L', 'blink'], wVal);
+          setExpr(em, ['blinkRight', 'blink_r', 'Blink_R'], 0);
+        } else {
+          setExpr(em, ['blinkRight', 'blink_r', 'Blink_R', 'blink'], wVal);
+          setExpr(em, ['blinkLeft', 'blink_l', 'Blink_L'], 0);
+        }
+      }
+    } else {
+      setExpr(em, ['blink', 'Blink'], blink);
+    }
+
+    // -- catchlight / eye shimmer ----------------------------------------
+    if (life.shimmer) {
+      const shim = 0.20 * Math.abs(Math.sin(t * 7.5));
+      setExpr(em, ['Joy', 'joy', 'happy'], shim);
+    }
+
+    // -- mouth: full 5-vowel anime viseme synthesis + stylized shapes ----
     life.speakW += ((life.speaking ? 1 : 0) - life.speakW) * Math.min(1, dt * 8);
     let target = 0;
     if (life.speaking) {
@@ -584,9 +739,22 @@ function lifeUpdate(t, dt) {
     if (typeof mouthOverride === 'number' && mouthOverride > life.mouth * g) {   // a yawn, a stretch
       life.mouth = mouthOverride; g = 1;
     }
-    setExpr(em, ['aa', 'A', 'a'], life.mouth * 0.62 * g);
-    setExpr(em, ['oh', 'O', 'o'], Math.max(0, Math.sin(t * 5.3)) * life.mouth * 0.22 * g);
-    setExpr(em, ['ih', 'I', 'i'], Math.max(0, Math.sin(t * 6.1 + 2)) * life.mouth * 0.16 * g);
+
+    // Japanese 5-vowel distribution: aa, oh, ih, ou, ee
+    setExpr(em, ['aa', 'A', 'a'], life.mouth * 0.55 * g);
+    setExpr(em, ['oh', 'O', 'o'], Math.max(0, Math.sin(t * 5.3)) * life.mouth * 0.24 * g);
+    setExpr(em, ['ih', 'I', 'i'], Math.max(0, Math.sin(t * 6.1 + 2)) * life.mouth * 0.18 * g);
+    setExpr(em, ['ou', 'U', 'u'], Math.max(0, Math.cos(t * 4.7)) * life.mouth * 0.15 * g);
+    setExpr(em, ['ee', 'E', 'e'], Math.max(0, Math.sin(t * 5.8 + 1)) * life.mouth * 0.14 * g);
+
+    // Stylized anime mouth overlays: cat (omega), dot, grin
+    if (life.animeMouth === 'cat') {
+      setExpr(em, ['CatMouth', 'omega', 'wavy', 'mouth_w'], life.animeMouthW * 0.85);
+    } else if (life.animeMouth === 'dot') {
+      setExpr(em, ['DotMouth', 'small_o', 'dot_mouth', 'oh', 'O'], life.animeMouthW * 0.75);
+    } else if (life.animeMouth === 'grin') {
+      setExpr(em, ['Grin', 'Joy', 'joy', 'happy'], life.animeMouthW * 0.80);
+    }
   } catch (e) {
     window.EVA_LIFE = false;
     console.warn('life layer disabled after an error:', e);
@@ -1496,6 +1664,7 @@ function presenceStep(frame, t, dt, idleLike) {
     try { danceStep(frame, o, t, dt, now, idleLike, P); }
     catch (e) { dance.w = 0; window.EVA_MUSIC_DANCE = false; console.warn('dance disabled after an error:', e); }
     if (P.beh) behaviourPose(P, o, now);   // eased by its own envelope, so it never snaps on or off
+    try { stateStep(o, dt); } catch (e) { /* state offset fallback */ }
   } catch (e) {
     window.EVA_PRESENCE = false;
     console.warn('presence layer disabled after an error:', e);
@@ -1932,10 +2101,160 @@ const PROC = {
   // a squat: hips down, knees out front, arms forward for balance
   p_squat:  { dur: 2.4,  f: (r, p) => ({ set: { luaX: 1.15, ruaX: 1.15, llaY: -0.15, rlaY: 0.15,
                                                 spineX: 0.22, headX: -0.15 }, squat: 1 }) },
+  // ---- specialized 3D anime motions (2026-11-15: unified anime motion system) ----
+  // quick enthusiastic double-nod
+  p_nod_double:{ dur: 0.8, f: (r, p) => ({ add: { headX: 0.22 * Math.sin(p * Math.PI * 4) * Math.sin(p * Math.PI), chestX: 0.05 * Math.sin(p * Math.PI * 4) } }) },
+  // slow deep solemn nod
+  p_nod_solemn:{ dur: 1.6, f: (r, p) => ({ set: { headX: 0.32 * Math.sin(p * Math.PI), spineX: 0.08 * Math.sin(p * Math.PI) } }) },
+  // sharp 20° curiosity head tilt (Kubikashige)
+  p_tilt:     { dur: 1.8, f: (r, p) => ({ set: { headZ: 0.30 * Math.sin(p * Math.PI), headX: -0.06 * Math.sin(p * Math.PI) } }) },
+  // looking away (cognitive retrieval / thinking), then returning to user
+  p_look_away:{ dur: 2.0, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { headY: -0.28 * env, headX: -0.14 * env, headZ: 0.08 * env } }; } },
+  // micro-recoil / sharp double-take on surprising input
+  p_jolt:     { dur: 0.7, rise: 0.15, fall: 0.5, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { headX: -0.22 * env, spineX: -0.08 * env }, add: { hipY: 0.02 * pulse(p, 0.1, 0.5) } }; } },
+  // leaning in toward screen with heightened interest
+  p_lean_in:  { dur: 2.2, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { spineX: 0.16 * env, chestX: 0.08 * env, headX: -0.06 * env } }; } },
+  // polite standing pose with hands clasped behind back
+  p_hands_behind_back:{ dur: 2.8, rise: 0.6, fall: 0.6, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { luaX: -0.32 * env, ruaX: -0.32 * env, llaY: -0.40 * env, rlaY: 0.40 * env, spineX: 0.06 * env, headX: 0.04 * env } }; } },
+  // confident crossed arms stance
+  p_crossed_arms:{ dur: 2.6, rise: 0.6, fall: 0.6, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { luaX: 0.78 * env, ruaX: 0.78 * env, llaY: -2.00 * env, rlaY: 2.00 * env, luaY: -0.50 * env, ruaY: 0.50 * env, spineX: -0.06 * env } }; } },
+  // index finger to cheek/chin pondering pose
+  p_finger_chin:{ dur: 2.4, rise: 0.5, fall: 0.5, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { ruaX: 0.90 * env, ruaY: 0.24 * env, ruaZ: r.ruaZ + 0.18 * env, rlaY: 2.40 * env, headZ: -0.20 * env, headX: -0.06 * env } }; } },
+  // celebratory victory fist pump
+  p_fist_pump_victory:{ dur: 1.8, rise: 0.4, fall: 0.5, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { ruaX: 0.85 * env, ruaZ: r.ruaZ + 0.22 * env, rlaY: 2.30 * env, headX: -0.08 * env }, add: { hipY: 0.024 * pulse(p, 0.2, 0.6) } }; } },
+  // hand-over-mouth polite giggle or gasp
+  p_hand_mouth:{ dur: 2.0, rise: 0.4, fall: 0.5, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { ruaX: 1.02 * env, ruaY: 0.22 * env, ruaZ: r.ruaZ + 0.16 * env, rlaY: 2.48 * env, headX: 0.06 * env }, shoulders: 0.10 * env }; } },
+  // hands apart indicating physical size or scale
+  p_iconic_size:{ dur: 2.2, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { luaX: 0.50 * env, ruaX: 0.50 * env, luaZ: r.luaZ - 0.65 * env, ruaZ: r.ruaZ + 0.65 * env, llaY: -0.60 * env, rlaY: 0.60 * env } }; } },
+  // right hand gesturing upward to show growth or expansion
+  p_iconic_growth:{ dur: 2.0, f: (r, p) => { const env = Math.sin(p * Math.PI), k = smooth(p); return { set: { ruaX: (0.30 + 0.45 * k) * env, ruaZ: r.ruaZ + 0.35 * env, rlaY: (1.10 - 0.45 * k) * env } }; } },
+  // gentle chest-level greeting wave
+  p_wave_gentle:{ dur: 2.0, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { ruaX: 0.45 * env, ruaZ: r.ruaZ + 0.15 * env, rlaY: 1.35 * env, rlaZ: (0.24 * Math.sin(p * Math.PI * 6)) * env } }; } },
+  // open-palm directional guiding / deictic pointing
+  p_deictic_point:{ dur: 2.0, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { ruaX: 0.58 * env, ruaZ: r.ruaZ + 0.50 * env, rlaY: 0.45 * env, spineY: -0.12 * env, headY: -0.18 * env } }; } },
+  // Eshaku: casual 15° bow
+  p_bow_eshaku:{ dur: 1.3, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { spineX: 0.24 * env, headX: 0.10 * env } }; } },
+  // Keirei: respectful 30° bow
+  p_bow_keirei:{ dur: 1.8, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { spineX: 0.46 * env, chestX: 0.12 * env, headX: 0.18 * env, luaX: 0.16 * env, ruaX: 0.16 * env, llaY: -0.90 * env, rlaY: 0.90 * env } }; } },
+  // Saikeirei: deep 45° apology or reverence bow
+  p_bow_saikeirei:{ dur: 2.5, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { spineX: 0.68 * env, chestX: 0.18 * env, headX: 0.22 * env, luaX: 0.20 * env, ruaX: 0.20 * env, llaY: -1.00 * env, rlaY: 1.00 * env } }; } },
+  // upward micro-startle jump
+  p_micro_startle:{ dur: 0.75, rise: 0.15, fall: 0.5, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { headX: -0.12 * env, spineX: -0.06 * env }, add: { hipY: 0.040 * pulse(p, 0.15, 0.55) }, shoulders: 0.22 * pulse(p, 0.15, 0.60) }; } },
+  // open confident posture
+  p_posture_open:{ dur: 2.4, rise: 0.6, fall: 0.6, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { chestX: -0.12 * env, spineX: -0.06 * env, luaX: -0.12 * env, ruaX: -0.12 * env, headX: -0.08 * env } }; } },
+  // closed sympathetic / shy posture
+  p_posture_closed:{ dur: 2.4, rise: 0.6, fall: 0.6, f: (r, p) => { const env = Math.sin(p * Math.PI); return { set: { chestX: 0.10 * env, spineX: 0.14 * env, headX: 0.15 * env, luaX: 0.32 * env, ruaX: 0.32 * env }, shoulders: 0.14 * env }; } },
 };
 const PROC_DURATIONS = Object.fromEntries(Object.entries(PROC).map(([k, v]) => [k, v.dur]));
 let procGesture = null;   // { name, start, dur }
 let gazeState = null;     // { gx, gy, start, ttl }
+
+// ---------------------------------------------------------------------------
+// Unified 3D Anime Avatar Functional State Machine
+// States: 'idle', 'listening', 'processing', 'speaking', 'success', 'error', 'extended_idle'
+// ---------------------------------------------------------------------------
+const AVATAR_STATE_CONFIGS = {
+  idle: {
+    headZ: 0, headX: 0, spineX: 0, chestX: 0,
+    mouth: 'normal', expr: '', blush: 0, sweat: false, framing: 'default'
+  },
+  listening: {
+    headZ: 0.14, headX: -0.04, spineX: 0.10, chestX: 0.04,
+    mouth: 'normal', expr: '', blush: 0, sweat: false, framing: 'default'
+  },
+  processing: {
+    headZ: -0.18, headX: -0.08, spineX: 0.04, chestX: 0.02,
+    mouth: 'normal', expr: '', blush: 0, sweat: false, framing: 'default'
+  },
+  speaking: {
+    headZ: 0, headX: -0.02, spineX: 0.06, chestX: 0.03,
+    mouth: 'normal', expr: '', blush: 0, sweat: false, framing: 'default'
+  },
+  success: {
+    headZ: 0.12, headX: -0.08, spineX: -0.04, chestX: -0.06,
+    mouth: 'grin', expr: 'Joy', blush: 0.4, sweat: false, framing: 'default',
+    gesture: 'p_fist_pump_victory'
+  },
+  error: {
+    headZ: -0.10, headX: 0.14, spineX: 0.12, chestX: 0.08,
+    mouth: 'normal', expr: 'Sad', blush: 0, sweat: true, framing: 'default',
+    gesture: 'p_bow_eshaku'
+  },
+  extended_idle: {
+    headZ: 0.08, headX: -0.03, spineX: -0.04, chestX: -0.02,
+    mouth: 'normal', expr: 'Relaxed', blush: 0, sweat: false, framing: 'default'
+  }
+};
+
+let currentAvatarState = 'idle';
+const stateTargetOffsets = { headZ: 0, headX: 0, spineX: 0, chestX: 0 };
+const stateCurrentOffsets = { headZ: 0, headX: 0, spineX: 0, chestX: 0 };
+
+function stateStep(o, dt) {
+  const k = Math.min(1, dt * 3.5);
+  for (const ch of ['headZ', 'headX', 'spineX', 'chestX']) {
+    stateCurrentOffsets[ch] += (stateTargetOffsets[ch] - stateCurrentOffsets[ch]) * k;
+    o[ch] = (o[ch] || 0) + stateCurrentOffsets[ch];
+  }
+}
+
+let blushTargetOpacity = 0, blushCurrentOpacity = 0;
+let sweatTargetOpacity = 0, sweatCurrentOpacity = 0;
+
+window.setBlush = function (intensity) {
+  blushTargetOpacity = Math.max(0, Math.min(1, +intensity || 0));
+};
+
+window.setSweatDrop = function (visible) {
+  sweatTargetOpacity = visible ? 1 : 0;
+};
+
+window.setCameraFraming = function (mode) {
+  cameraFramingMode = mode || 'default';
+  if (typeof fitTargetBase === 'undefined' || !fitTargetBase) return;
+  if (cameraFramingMode === 'closeup') {
+    fitTarget.h = fitTargetBase.h * 0.58;
+    fitTarget.cx = fitTargetBase.cx;
+    fitTarget.cy = fitTargetBase.cy + fitTargetBase.h * 0.24;
+  } else if (cameraFramingMode === 'present') {
+    fitTarget.h = fitTargetBase.h * 1.15;
+    fitTarget.cx = fitTargetBase.cx - 0.15;
+    fitTarget.cy = fitTargetBase.cy;
+  } else {
+    fitTarget.h = fitTargetBase.h;
+    fitTarget.cx = fitTargetBase.cx;
+    fitTarget.cy = fitTargetBase.cy;
+  }
+};
+
+window.setAvatarState = function (stateName, opts = {}) {
+  const cfg = AVATAR_STATE_CONFIGS[stateName];
+  if (!cfg) return false;
+  currentAvatarState = stateName;
+  stateTargetOffsets.headZ = cfg.headZ;
+  stateTargetOffsets.headX = cfg.headX;
+  stateTargetOffsets.spineX = cfg.spineX;
+  stateTargetOffsets.chestX = cfg.chestX;
+
+  if (typeof window.setAnimeMouth === 'function') window.setAnimeMouth(cfg.mouth, 0.8);
+  if (typeof window.setExpression === 'function') {
+    if (cfg.expr) window.setExpression(cfg.expr, 0.7);
+    else window.setExpression('', 0);
+  }
+  if (typeof window.setBlush === 'function') window.setBlush(cfg.blush);
+  if (typeof window.setSweatDrop === 'function') window.setSweatDrop(cfg.sweat);
+  if (typeof window.setCameraFraming === 'function') window.setCameraFraming(cfg.framing);
+
+  const gesture = (opts && opts.gesture) || cfg.gesture;
+  if (gesture && typeof playProcedural === 'function') {
+    playProcedural(gesture);
+  }
+  return true;
+};
+
+window.getAvatarState = function () {
+  return currentAvatarState;
+};
 
 function playProcedural(name) {
   if (!window.EVA_PROCEDURAL || !usingGltf || !vrmInstance) return false;
@@ -2640,6 +2959,25 @@ function tick() {
     gltfMixer.update(dt);
   } else {
     animateProcedural(t);
+  }
+  // Camera framing interpolation
+  if (typeof fitTarget !== 'undefined' && fitTarget) {
+    const camK = Math.min(1, dt * 4.5);
+    let camMoved = false;
+    if (Math.abs(currentCamH - fitTarget.h) > 0.001) { currentCamH += (fitTarget.h - currentCamH) * camK; camMoved = true; }
+    if (Math.abs(currentCamCx - fitTarget.cx) > 0.001) { currentCamCx += (fitTarget.cx - currentCamCx) * camK; camMoved = true; }
+    if (Math.abs(currentCamCy - fitTarget.cy) > 0.001) { currentCamCy += (fitTarget.cy - currentCamCy) * camK; camMoved = true; }
+    if (camMoved) applyCameraFit();
+  }
+  // Anime overlays easing
+  if (blushMeshLeft && blushMeshRight) {
+    blushCurrentOpacity += (blushTargetOpacity - blushCurrentOpacity) * Math.min(1, dt * 5.0);
+    blushMeshLeft.material.opacity = blushCurrentOpacity;
+    blushMeshRight.material.opacity = blushCurrentOpacity;
+  }
+  if (sweatDropSprite) {
+    sweatCurrentOpacity += (sweatTargetOpacity - sweatCurrentOpacity) * Math.min(1, dt * 6.0);
+    sweatDropSprite.material.opacity = sweatCurrentOpacity;
   }
   // If the WebGL context is dying, render() throws every single frame --
   // without this guard that spams the Python-side log at ~10 lines/second

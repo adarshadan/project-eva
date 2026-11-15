@@ -49,7 +49,9 @@ function world(seed = 12345) {
                  bodyLifeApply, setLocomotion: window.setLocomotion,
                  drives, takeDriveIntents: window.takeDriveIntents,
                  driveResult: window.driveResult, setBodyState: window.setBodyState, BEHAVIOURS,
-                 setIntention: window.setIntention, getDrives: window.getDrives, intentBias };`, ctx);
+                 setIntention: window.setIntention, getDrives: window.getDrives, intentBias,
+                 setAvatarState: window.setAvatarState, getAvatarState: window.getAvatarState,
+                 triggerWink: window.triggerWink, setAnimeMouth: window.setAnimeMouth };`, ctx);
   const api = ctx.api;
   let t = 0;
   const frame = (dt = 1 / 30) => {
@@ -1175,6 +1177,47 @@ check('Phase 5: leaning and peeking are eased: no snaps, bounded, and the lean b
   const lean = w.bones.spine.rotation.z - before;
   assert(Math.abs(atWalk - before) < 0.06, `she leaned before arriving (${(atWalk - before).toFixed(3)} rad during the walk)`);
   assert(B.pr.dir === 1 && lean > 0.02, `leaning at the left edge of a wall should bend her toward it (dir ${B.pr.dir}, spine dz ${lean.toFixed(3)})`);
+});
+
+check('Anime 3D system: all new procedural anime gestures execute, stay bounded, and return to rest', () => {
+  const NEW_GESTURES = [
+    'p_nod_double', 'p_nod_solemn', 'p_tilt', 'p_look_away', 'p_jolt', 'p_lean_in',
+    'p_hands_behind_back', 'p_crossed_arms', 'p_finger_chin', 'p_fist_pump_victory',
+    'p_hand_mouth', 'p_iconic_size', 'p_iconic_growth', 'p_wave_gentle', 'p_deictic_point',
+    'p_bow_eshaku', 'p_bow_keirei', 'p_bow_saikeirei', 'p_micro_startle', 'p_posture_open', 'p_posture_closed'
+  ];
+  for (const g of NEW_GESTURES) {
+    const w = world();
+    assert(w.api.play(g), `could not play ${g}`);
+    const dur = w.api.PROC[g].dur;
+    const steps = Math.ceil(dur * 30) + 10;
+    for (let i = 0; i < steps; i++) {
+      const f = w.frame();
+      for (const ch of ['luaX', 'ruaX', 'llaY', 'rlaY', 'headX', 'headY', 'headZ', 'spineX']) {
+        if (typeof f.o[ch] === 'number') {
+          assert(Math.abs(f.o[ch]) < 3.2, `gesture ${g} channel ${ch} out of bounds: ${f.o[ch]}`);
+        }
+      }
+    }
+    const endF = w.frame();
+    assert(!w.api.gesture(), `gesture ${g} did not finish within expected time`);
+  }
+});
+
+check('Anime 3D system: unified state machine transitions across all states without snapping', () => {
+  const STATES = ['idle', 'listening', 'processing', 'speaking', 'success', 'error', 'extended_idle'];
+  const w = world();
+  for (const st of STATES) {
+    assert(w.api.setAvatarState(st), `failed to set avatar state ${st}`);
+    assert(w.api.getAvatarState() === st, `state mismatch: expected ${st}, got ${w.api.getAvatarState()}`);
+    for (let i = 0; i < 20; i++) {
+      const f = w.frame();
+      assert(Math.abs(f.o.headZ) < 1.0, `state ${st} headZ out of bounds: ${f.o.headZ}`);
+      assert(Math.abs(f.o.headX) < 1.0, `state ${st} headX out of bounds: ${f.o.headX}`);
+      assert(Math.abs(f.o.spineX) < 1.0, `state ${st} spineX out of bounds: ${f.o.spineX}`);
+    }
+  }
+  assert(w.api.setAvatarState('invalid_state_xyz') === false, 'accepted invalid state');
 });
 
 console.log(failures ? `\n${failures} motion check(s) FAILED` : '\nall motion checks passed');

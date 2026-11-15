@@ -33,22 +33,28 @@ def install(ctx):
 
     def speaker_status(text):
         shown = text or ("Thinking" if state["thinking"] else idle_status())
+        if shown == "Speaking":
+            bridge.fire(lambda: avatar.set_avatar_state("speaking"))
+        elif shown == "Listening":
+            bridge.fire(lambda: avatar.set_avatar_state("listening"))
         bridge.fire(lambda: avatar.set_status(shown, animated=shown in ("Speaking", "Thinking")))
 
     def on_state(kind, detail=""):
         if kind == "thinking":
             state["thinking"] = True
-            bridge.fire(lambda: (avatar.set_expression(*MOOD["thinking"]),
+            bridge.fire(lambda: (avatar.set_avatar_state("processing"),
+                                 avatar.set_expression(*MOOD["thinking"]),
                                  avatar.set_status("Thinking", animated=True),
                                  avatar.show_typing(True)))          # iMessage's typing dots
         elif kind == "waiting":               # wait_for_person: her turn is paused until the person acts
-            bridge.fire(lambda: (avatar.clear_expression(), avatar.show_typing(False),
+            bridge.fire(lambda: (avatar.set_avatar_state("idle"),
+                                 avatar.clear_expression(), avatar.show_typing(False),
                                  avatar.set_status("Waiting for you", animated=False)))
         elif kind == "error":
-            bridge.fire(lambda: avatar.set_expression(*MOOD["error"]))
+            bridge.fire(lambda: (avatar.set_avatar_state("error"), avatar.set_expression(*MOOD["error"])))
         elif kind == "idle":
             state["thinking"] = False
-            bridge.fire(lambda: (avatar.clear_expression(), avatar.show_typing(False)))
+            bridge.fire(lambda: (avatar.set_avatar_state("idle"), avatar.clear_expression(), avatar.show_typing(False)))
             if not ctx.speaker.busy():
                 speaker_status(None)
 
