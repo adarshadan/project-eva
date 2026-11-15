@@ -29,6 +29,16 @@ from eva_app.startup import (CORE_MODULES, RESTART_EXIT_CODE, startup_self_test,
 
 
 def main():
+    if "--selftest" in sys.argv:
+        import selftest
+        problems = selftest.run()
+        if problems:
+            for p in problems:
+                print(f"SELFTEST FAIL: {p}")
+            sys.exit(1)
+        print("SELFTEST OK")
+        sys.exit(0)
+
     from eva_app import startup
     startup.prepare()                    # crash reports, renderer flags, every module imports
 

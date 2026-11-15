@@ -20,12 +20,19 @@ CORE_MODULES = ("core.registry", "core.effects", "core.toolset", "core.agent", "
                 "ui_navigate", "embodiment", "avatar_renderer", "backend_tools", "voice", "vision",
                 "desktop_control", "browser_agent", "browser_link", "patrol", "system_tools", "scheduler", "recorder",
                 "idle_behavior", "overlay_effects", "gui_watchdog", "flicker_probe", "ring_layout", "ubiquity", "life",
-                "everyday_tools", "file_index", "avatar_ui", "deadline", "app_resolver", "onboarding", "welcome_ui",
+                "everyday_tools", "file_index", "coder", "avatar_ui", "deadline", "app_resolver", "onboarding", "welcome_ui",
                 "core.task_card",
                 "eva_app.context", "eva_app.status", "eva_app.brain", "eva_app.helpers", "eva_app.activities",
                 "eva_app.browser", "eva_app.mic", "eva_app.housekeeping", "eva_app.reach", "eva_app.lifecycle",
                 "eva_app.tray", "eva_app.own_windows", "eva_app.schedule", "eva_app.life",
                 "eva_app.welcome")
+
+BOUND_AT_STARTUP = {
+    "delegate", "helpers_status", "cancel_helper", "play_animation", "stop_animation",
+    "walk_to_screen", "go_home", "sit_on_window", "sit_down", "stand_up", "run_recording",
+    "remember", "recall", "forget", "forget_all", "save_skill", "open_settings",
+    "restart_as_administrator", "operate_computer", "wait_for_person", "use_tools",
+}
 
 
 def _check_stage_padding():

@@ -7438,6 +7438,15 @@ def her_windows_and_mind():
         assert forbidden not in msrc, f"mind.py mentions {forbidden}: it never moves her or touches a window"
 
 
+def selftest_proves_build_healthy():
+    """WO-002: proves Eva can start without opening a window or using the network."""
+    import selftest
+    assert selftest.run() == [], f"selftest reported problems on clean repo: {selftest.run()}"
+    fake = "fake_module_not_real"
+    problems = selftest.run(modules=[fake])
+    assert any(fake in p for p in problems), f"selftest did not report problem naming {fake}: {problems}"
+
+
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",
                    animation_follows_the_task),
                   ("the agent drives the activity pose: thinking -> per tool -> idle",
@@ -7537,7 +7546,9 @@ for label, fn in [("the animation pose follows the task (tool and skill both map
                     she_hears_music_not_speech_and_stays_off_without_the_library),
                    ("her drives choose, keep clear, and retire the scripted idle", her_drives_choose_and_keep_clear),
                    ("windows are scenery she never covers, and the mind is rare, polite and private",
-                    her_windows_and_mind)]:
+                    her_windows_and_mind),
+                   ("selftest proves build healthy and catches unimportable modules",
+                    selftest_proves_build_healthy)]:
     check(label, fn)
 
 print()
