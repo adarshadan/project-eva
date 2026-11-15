@@ -99,3 +99,87 @@ not start (13:23 "No module named 'coder'"). There was no health check and no ro
 - No more rules added to the prompt for single incidents. No new feature flags without a test. No model
   change without running the scorecard before and after (MiniMax was made primary on 11-14 without one).
 - Do not start A4 before A1: the body refactor touches the largest files and needs fast tests and rollback.
+
+# Part B -- the body worth having (target architecture, not fixes)
+
+Design question: if a mind had to live in this body, what would it need? Part A is the skeleton that stops
+her breaking. Part B is the set of organs. The governing idea: THE MIND IS SLOW AND RARE (a free cloud
+model, seconds per thought, ~30 thoughts a minute at best), so the body must perceive, move and react on its
+own, locally, and consult the mind for MEANING, never for motor control.
+
+## B0. Nervous system (everything else plugs into this)
+- Three speeds: REFLEX (< 100 ms, local rules) -> SKILL (0.1-2 s, local procedures, "muscle memory") ->
+  DELIBERATION (seconds, the model). A request falls to the slowest tier only when the faster ones cannot
+  handle it. Today everything goes to deliberation.
+- One event bus (in-process, typed events: heard, saw, touched, changed, felt, wants). Senses publish; the
+  world model, the director, the task engine and the mind subscribe. No module calls another's internals.
+- One WORLD MODEL: a live, queryable picture of the desktop and the person -- windows, their controls and
+  text, what changed in the last minute, what the person is doing, what is playing, where she is. Every
+  layer and every prompt reads from it. It is her working memory of the present.
+
+## B1. Eyes -- always open, cheap, structured
+- Today she is blind between tool calls and each look is a 5-10 s cloud request.
+- Continuous local vision: UI Automation / accessibility tree diffs, window events (SetWinEventHook), screen
+  change detection (frame differencing on a downscaled capture), local OCR only on regions that changed.
+  This feeds the world model at a few Hz for almost no cost.
+- The cloud vision model is the fovea: called only for what structure cannot tell (a picture, a game board,
+  a canvas), on a cropped region, with the world model's text as context.
+- Prove: "what just changed on screen?" answered from the world model with no model call; a new dialog is in
+  the world model within 300 ms.
+
+## B2. Ears -- continuous, and aware of who is speaking
+- Streaming recognition with partial words (so she can nod, look up, and know when a turn ends).
+- Source separation by channel: microphone (the person) vs loopback (what the PC plays) vs her own voice
+  (subtracted, so she never hears herself or a video as the person).
+- Beyond words: tone (calm, annoyed, hurried -> her manner), sound events (notification, call ringing,
+  music starting/stopping), silence as a signal.
+- Prove: a YouTube voice never triggers a reply; her own speech is never transcribed; an annoyed "no, STOP"
+  halts within 300 ms.
+
+## B3. Hands -- precise, fast, with a sense of touch
+- Act through structure first: app APIs and accessibility (UIA invoke/value patterns, browser DOM via the
+  extension), keyboard next, pixels last. Pixel clicking is the wheelchair, not the hand.
+- Touch feedback on every action: what did the thing I touched do? (value changed, window appeared, focus
+  moved). No feedback within the expected time = the action failed, immediately, without asking the model.
+- Motor skills: parameterised procedures compiled from demonstrations (watch.py) and from successful tasks,
+  stored with their preconditions and checks. Performed at the SKILL tier; the mind only chooses them.
+- An undo journal: every change she makes records how to reverse it (file versions, closed tabs' URLs,
+  moved windows' old places). "Undo that" always works for her own actions.
+
+## B4. Proprioception and interoception -- knowing her own state
+- Body: where she is, what she is touching, what she is in the middle of.
+- Inner: energy = remaining request budget; fatigue = current latency; pain = errors and failed checks;
+  health of each sense (mic level, recogniser up, vision up). All in the world model.
+- She adapts and says so honestly: low budget -> shorter thinking, more reflex; a sense is down -> "I cannot
+  hear you well right now" instead of guessing.
+
+## B5. Memory and continuity of self
+- Working memory = the world model + the current task. Episodic = what happened, with whom, how it went
+  (searchable, summarised nightly). Semantic = facts and preferences of the person and the machine.
+  Procedural = skills. Today these are scattered (memory.db, skills, chat history, HANDOFF).
+- She wakes knowing yesterday: what was left unfinished, what the person was annoyed by, what worked.
+- Corrections become lasting behaviour through memory and procedures, not through new prompt text.
+
+## B6. Voice, face and presence -- one expression system
+- Speech that starts in < 1 s (streamed), can be interrupted mid-word, uses back-channels ("mm", "okay") from
+  the reflex tier, and carries the feeling (pace, energy) the director holds.
+- Face, gaze, gesture and voice driven from ONE feeling state, so they never disagree. Lip sync from audio.
+
+## B7. Initiative -- a being acts, a tool waits
+- From the world model she notices: a download finished, an error dialog the person has stared at for a
+  minute, battery low, a meeting in five minutes, the same manual steps done three times (offer to learn it).
+- She offers, briefly and rarely, by the manners in A5; she never acts on the person's things unasked.
+- Reach: phone notifications for approvals and news when the person is away; connectors (calendar, mail).
+
+## B8. Growth
+- Every task leaves a trace: outcome by observation, time, model calls. A nightly self-review (idle hours,
+  class-4 budget) turns failures into repaired procedures and runs the scorecard as her fitness measure.
+
+## Order of building (after A1-A3)
+B0 (bus + world model) -> B1 eyes -> B3 hands -> B2 ears -> B4 -> A4/B6 body and expression -> B5 -> B7 -> B8.
+B0 and B1 change the most: once she sees continuously and structurally, tasks, manners and aliveness all
+get a real foundation instead of rules.
+
+## Honest limits
+A free cloud model and an i5 laptop cap how fast and how deeply she can THINK. They do not cap how well she
+can sense, move and react -- that is local engineering. This plan spends the effort there for that reason.
