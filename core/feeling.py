@@ -21,19 +21,20 @@ import re
 
 # word -> (energy, mood, reaction or None, reaction size)
 LEXICON = {
-    "happy": (0.65, 0.7, "delight", 0.5), "excited": (0.92, 0.8, "delight", 0.9),
-    "delighted": (0.8, 0.85, "delight", 0.8), "glad": (0.6, 0.6, None, 0), "joyful": (0.85, 0.85, "delight", 0.8),
-    "proud": (0.7, 0.8, "proud", 0.7), "curious": (0.7, 0.3, "curious", 0.6),
+    "happy": (0.65, 0.7, "delight", 0.5), "excited": (0.92, 0.8, "victory", 0.8),
+    "delighted": (0.8, 0.85, "delight", 0.8), "glad": (0.6, 0.6, "wave", 0.5), "joyful": (0.85, 0.85, "delight", 0.8),
+    "proud": (0.7, 0.8, "confident", 0.7), "curious": (0.7, 0.3, "curious", 0.6),
     "interested": (0.65, 0.3, "curious", 0.4), "thoughtful": (0.4, 0.1, "curious", 0.3),
     "calm": (0.35, 0.3, None, 0), "relaxed": (0.3, 0.4, None, 0), "content": (0.4, 0.5, None, 0),
-    "amused": (0.65, 0.6, "delight", 0.4), "playful": (0.85, 0.6, "delight", 0.6),
-    "determined": (0.8, 0.2, "eager", 0.6), "eager": (0.85, 0.45, "eager", 0.8), "keen": (0.75, 0.4, "eager", 0.5),
-    "focused": (0.6, 0.1, None, 0), "sorry": (0.35, -0.45, "oops", 0.5), "sad": (0.25, -0.6, "oops", 0.3),
+    "amused": (0.65, 0.6, "gasp", 0.5), "playful": (0.85, 0.6, "gasp", 0.6),
+    "determined": (0.8, 0.2, "confident", 0.6), "eager": (0.85, 0.45, "eager", 0.8), "keen": (0.75, 0.4, "eager", 0.5),
+    "focused": (0.6, 0.1, None, 0), "sorry": (0.35, -0.45, "bow", 0.5), "sad": (0.25, -0.6, "oops", 0.3),
     "embarrassed": (0.45, -0.3, "oops", 0.6), "confused": (0.5, -0.2, "curious", 0.5),
-    "worried": (0.55, -0.4, None, 0), "surprised": (0.8, 0.2, "curious", 0.8),
-    "grateful": (0.55, 0.75, "delight", 0.4), "thankful": (0.55, 0.75, "delight", 0.4),
+    "worried": (0.55, -0.4, None, 0), "surprised": (0.8, 0.2, "jolt", 0.7),
+    "grateful": (0.55, 0.75, "bow", 0.6), "thankful": (0.55, 0.75, "bow", 0.6),
     "sleepy": (0.15, 0.1, None, 0), "tired": (0.2, -0.1, None, 0), "frustrated": (0.65, -0.5, "oops", 0.6),
-    "relieved": (0.45, 0.6, "delight", 0.3), "shy": (0.4, 0.3, "oops", 0.3), "confident": (0.7, 0.6, "proud", 0.5),
+    "relieved": (0.45, 0.6, "delight", 0.3), "shy": (0.4, 0.3, "oops", 0.3), "confident": (0.7, 0.6, "confident", 0.6),
+    "victorious": (0.9, 0.8, "victory", 0.85), "startled": (0.8, -0.1, "startle", 0.7),
 }
 DEFAULT = (0.6, 0.25, None, 0)
 NOT_FEELINGS = {"voice", "chat", "system", "observation", "scheduled", "text", "note", "image", "link", "done",

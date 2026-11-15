@@ -9,7 +9,8 @@ log = logger.get_logger("__main__")
 
 # Moments in the conversation, answered with her body (2026-10-11).
 MOMENT_GESTURES = {"thanked": "p_heart", "greeted": "p_wave", "unclear": "p_scratch_head",
-                   "error": "p_facepalm", "paused": "p_shh", "resumed": "p_wave"}
+                   "error": "p_facepalm", "paused": "p_shh", "resumed": "p_wave",
+                   "surprise": "p_jolt", "humor": "p_hand_mouth", "confidence": "p_crossed_arms"}
 
 
 def install(ctx):
@@ -150,6 +151,10 @@ def install(ctx):
         g = MOMENT_GESTURES.get(kind)
         if g:
             bridge.fire(lambda: avatar.play(g, loop=False))
+            if kind == "humor":
+                bridge.fire(lambda: avatar.set_blush(0.6))
+            elif kind == "surprise":
+                bridge.fire(lambda: avatar.trigger_startled_blink())
     avatar.chat_popup.load_history(history.recent(80))
 
     runtime = Runtime(agent, speaker, show_text=show_text, on_heard=on_heard_activity,

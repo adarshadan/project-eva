@@ -1457,12 +1457,17 @@ const FIDGETS = {
 // every beat and sized by her energy -- generated, never a replayed clip.
 const affect = { e: 0.62, v: 0.35, te: 0.62, tv: 0.35, until: 0, react: null };
 const AFFECT_BASE = { e: 0.62, v: 0.35 };
+let speechAudioLevel = 0;
+window.setSpeechAudioLevel = function (lvl) {
+  speechAudioLevel = Math.max(0, Math.min(1, Number(lvl) || 0));
+};
 const talk = { w: 0, next: 0, beat: null, sway: Math.random() * 6, hand: 1, cur: {} };
 function talkStep(o, t, dt, now) {
-  const want = (typeof life !== 'undefined' && life.speaking) ? 1 : 0;
+  const want = ((typeof life !== 'undefined' && life.speaking) || (typeof currentAvatarState !== 'undefined' && currentAvatarState === 'speaking')) ? 1 : 0;
   talk.w += (want - talk.w) * Math.min(1, dt * 4);
   if (talk.w < 0.02) { talk.beat = null; talk.cur = {}; return; }
-  const e = affect.e, g = talk.w * (0.55 + 0.7 * e);
+  const e = affect.e, audioBoost = speechAudioLevel > 0.25 ? speechAudioLevel * 0.5 : 0;
+  const g = talk.w * (0.55 + 0.7 * e + audioBoost);
   if (want && now >= talk.next) {           // a new beat: which hand, how big, how long -- all fresh
     const r = Math.random();
     talk.hand = r < 0.4 ? -1 : r < 0.8 ? 1 : 0;           // 0 = both hands
@@ -1507,9 +1512,9 @@ window.setAffect = function (energy, mood, holdS) {
 function rnd(a, b) { return a + Math.random() * (b - a); }
 window.emote = function (name, size) {
   const k = Math.max(0.1, Math.min(1, +size || 0.6));
-  const known = ['eager', 'delight', 'oops', 'curious', 'proud'];
+  const known = ['eager', 'delight', 'oops', 'curious', 'proud', 'jolt', 'bow', 'gasp', 'victory', 'confident', 'wave', 'startle'];
   if (!known.includes(name)) return false;
-  affect.react = { name, k, start: performance.now() / 1000, dur: rnd(0.9, 1.4) * (name === 'oops' ? 1.3 : 1),
+  affect.react = { name, k, start: performance.now() / 1000, dur: rnd(0.9, 1.4) * (name === 'oops' || name === 'bow' ? 1.3 : 1),
                    side: Math.random() < 0.5 ? -1 : 1, a: rnd(0.8, 1.2), b: rnd(0.8, 1.2), f: rnd(0.85, 1.2) };
   return true;
 };
@@ -1553,6 +1558,30 @@ function affectStep(o, frame, t, dt, idleLike, now) {
         o.chestX -= 0.14 * env * r.a; o.headX -= 0.14 * env; o.luaY -= 0.3 * env; o.ruaY += 0.3 * env;
         o.luaZ -= 0.35 * env * r.b; o.ruaZ += 0.35 * env * r.b;    // arms out a little,
         o.llaY -= 1.0 * env; o.rlaY += 1.0 * env;                  // elbows bent: hands to the hips
+      } else if (r.name === 'jolt') {     // double-take / sudden alert recoil
+        o.headX -= 0.20 * env * r.a; o.spineX -= 0.10 * env;
+        o.luaZ += 0.14 * env; o.ruaZ -= 0.14 * env;
+      } else if (r.name === 'bow') {      // polite Japanese bow from waist
+        o.spineX += 0.24 * env * r.a; o.headX += 0.12 * env * r.b;
+        o.luaX += 0.15 * env; o.ruaX += 0.15 * env; o.llaY -= 0.20 * env; o.rlaY += 0.20 * env;
+      } else if (r.name === 'gasp') {     // hand over mouth giggle / surprise
+        if (r.side > 0) { o.ruaX += 0.60 * env * r.a; o.rlaY += 1.25 * env; o.ruaY += 0.40 * env; }
+        else { o.luaX += 0.60 * env * r.a; o.llaY -= 1.25 * env; o.luaY -= 0.40 * env; }
+        o.headZ += 0.08 * r.side * env;
+      } else if (r.name === 'victory') {  // fist pump celebrate
+        o.ruaX += 0.75 * env * r.a; o.rlaY += 1.20 * env; o.ruaZ += 0.22 * env;
+        o.spineX -= 0.08 * env; o.headX -= 0.08 * env;
+        o.hipY = (o.hipY || 0) + 0.03 * Math.max(0, osc) * env * r.a;
+      } else if (r.name === 'confident') { // crossed arms posture
+        o.luaX += 0.38 * env; o.ruaX += 0.38 * env;
+        o.llaY -= 1.25 * env; o.rlaY += 1.25 * env;
+        o.headX -= 0.10 * env * r.a; o.chestX -= 0.05 * env;
+      } else if (r.name === 'wave') {     // gentle hand wave
+        o.ruaX += 0.50 * env * r.a; o.rlaY += 1.10 * env; o.ruaZ += 0.30 * env;
+        o.ruaY += 0.24 * Math.sin(p * Math.PI * 6 * r.f) * env;
+      } else if (r.name === 'startle') {  // micro-startle bounce
+        o.hipY = (o.hipY || 0) + 0.025 * Math.sin(p * Math.PI * 3) * env;
+        o.headX -= 0.08 * env; o.luaZ += 0.15 * env; o.ruaZ -= 0.15 * env;
       }
     }
   }
@@ -2271,6 +2300,19 @@ window.setGaze = function (gx, gy, ttlMs) {
   gazeState = { gx: gx, gy: gy, start: performance.now() / 1000, ttl: Math.max(0.3, ttlMs / 1000) };
 };
 
+let dynamicPointTarget = null;
+window.pointAt = function (screenX, screenY, duration = 1.6) {
+  if (!window.EVA_PROCEDURAL) return false;
+  const now = performance.now() / 1000;
+  dynamicPointTarget = {
+    tx: Number(screenX) || 0,
+    ty: Number(screenY) || 0,
+    start: now,
+    dur: Math.max(0.8, Number(duration) || 1.6)
+  };
+  return true;
+};
+
 // ---- walking: weight eased in and out; she turns toward where she is going ---
 let walkW = 0, walkPhase = 0, facing = 0, facingTarget = 0;
 let walkRate = 0;            // stride radians per second matched to the ground speed (0 = the fixed default)
@@ -2576,6 +2618,42 @@ const poseController = {
         shoulders = (res.shoulders || 0) * env;
         squat = (res.squat || 0) * env;
         gestureMouth = (res.mouth || 0) * env;
+      }
+    }
+
+    // Dynamic screen-space procedural pointing toward real coordinates
+    if (dynamicPointTarget && window.EVA_PROCEDURAL) {
+      const dp = dynamicPointTarget;
+      const age = (performance.now() / 1000) - dp.start;
+      const p = age / dp.dur;
+      if (p >= 1) {
+        dynamicPointTarget = null;
+      } else {
+        const env = Math.sin(p * Math.PI);
+        const w = (typeof world !== 'undefined' && world) ? world : null;
+        const eva = (w && Array.isArray(w.eva)) ? w.eva : [0, 0, 0, 0];
+        const screen = (w && Array.isArray(w.screen) && w.screen.length >= 2) ? w.screen : [1920, 1080];
+        const evaX = (eva[0] + eva[2]) / 2;
+        const evaY = eva[1] + (eva[3] - eva[1]) * 0.35;
+        const dx = (dp.tx - evaX) / Math.max(1, screen[0] / 2);
+        const dy = (dp.ty - evaY) / Math.max(1, screen[1] / 2);
+        if (dx > 0) {
+          const targetElevation = Math.max(0.15, Math.min(0.85, 0.45 - dy * 0.4));
+          const targetOutward = Math.max(-0.6, Math.min(-0.15, -0.45 * dx));
+          o.luaX += (targetElevation - o.luaX) * env;
+          o.luaZ += (targetOutward - o.luaZ) * env;
+          o.llaY += (-0.12 - o.llaY) * env;
+          o.spineY += (0.15 * Math.min(1, dx) - o.spineY) * env;
+          o.headY += (0.35 * Math.min(1, dx) - o.headY) * env;
+        } else {
+          const targetElevation = Math.max(0.15, Math.min(0.85, 0.45 - dy * 0.4));
+          const targetOutward = Math.max(0.15, Math.min(0.6, -0.45 * dx));
+          o.ruaX += (targetElevation - o.ruaX) * env;
+          o.ruaZ += (targetOutward - o.ruaZ) * env;
+          o.rlaY += (0.12 - o.rlaY) * env;
+          o.spineY += (0.15 * Math.max(-1, dx) - o.spineY) * env;
+          o.headY += (0.35 * Math.max(-1, dx) - o.headY) * env;
+        }
       }
     }
 

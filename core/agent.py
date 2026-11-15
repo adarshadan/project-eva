@@ -977,8 +977,58 @@ class Agent:
                 "content": "(earlier steps of this task were trimmed to save context)",
             }] + tail
 
+        # Invariant: never leave orphaned tool results or unmatched tool_calls
+        self.messages = _sanitize_messages(self.messages)
+
         if len(self.messages) != original_len:
             log.info(f"Trimmed conversation history: {original_len} -> {len(self.messages)} messages.")
+
+
+def _sanitize_messages(messages):
+    """Ensures every tool message has a valid preceding assistant message with matching tool_call_id,
+    and every assistant tool_calls message has all matching tool messages."""
+    sanitized = []
+    i = 0
+    while i < len(messages):
+        m = messages[i]
+        role = m.get("role")
+        if role == "tool":
+            if not sanitized or sanitized[-1].get("role") != "assistant" or not sanitized[-1].get("tool_calls"):
+                i += 1
+                continue
+            tc_ids = {tc["id"] for tc in sanitized[-1].get("tool_calls", [])}
+            if m.get("tool_call_id") not in tc_ids:
+                i += 1
+                continue
+            sanitized.append(m)
+            i += 1
+        elif role == "assistant" and m.get("tool_calls"):
+            tc_ids = [tc["id"] for tc in m["tool_calls"]]
+            j = i + 1
+            tool_msgs = []
+            found_ids = set()
+            while j < len(messages) and messages[j].get("role") == "tool":
+                tid = messages[j].get("tool_call_id")
+                if tid in tc_ids:
+                    tool_msgs.append(messages[j])
+                    found_ids.add(tid)
+                j += 1
+            if len(found_ids) == len(tc_ids):
+                sanitized.append(m)
+                sanitized.extend(tool_msgs)
+                i = j
+            else:
+                clean_m = dict(m)
+                clean_m.pop("tool_calls", None)
+                if not clean_m.get("content"):
+                    names = ", ".join(tc["function"]["name"] for tc in m["tool_calls"])
+                    clean_m["content"] = f"(used {names})"
+                sanitized.append(clean_m)
+                i = j
+        else:
+            sanitized.append(m)
+            i += 1
+    return sanitized
 
 
 # ---- evidence before claims (after superpowers' verification-before-completion) ---------

@@ -1071,6 +1071,14 @@ class AvatarWidget(QWidget):
         """Camera framing: default, closeup, present."""
         self.view.page().runJavaScript(f"if (window.setCameraFraming) setCameraFraming('{mode}');")
 
+    def point_at(self, screen_x: int, screen_y: int, duration: float = 1.6):
+        """Generative screen-space dynamic pointing toward arbitrary screen coordinates."""
+        self.view.page().runJavaScript(f"if (window.pointAt) pointAt({int(screen_x)}, {int(screen_y)}, {float(duration):.2f});")
+
+    def set_speech_audio_level(self, level: float):
+        """Feed live speech amplitude into speech prosody motion engine."""
+        self.view.page().runJavaScript(f"if (window.setSpeechAudioLevel) setSpeechAudioLevel({float(level):.2f});")
+
     # ---------------- movement: real on-screen walking ----------------
     def _set_locomotion(self, moving: bool, direction: int, speed_px_s: float = 0):
         self.view.page().runJavaScript(

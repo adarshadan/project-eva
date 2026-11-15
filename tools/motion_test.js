@@ -51,7 +51,8 @@ function world(seed = 12345) {
                  driveResult: window.driveResult, setBodyState: window.setBodyState, BEHAVIOURS,
                  setIntention: window.setIntention, getDrives: window.getDrives, intentBias,
                  setAvatarState: window.setAvatarState, getAvatarState: window.getAvatarState,
-                 triggerWink: window.triggerWink, setAnimeMouth: window.setAnimeMouth };`, ctx);
+                 triggerWink: window.triggerWink, setAnimeMouth: window.setAnimeMouth,
+                 pointAt: window.pointAt, setSpeechAudioLevel: window.setSpeechAudioLevel };`, ctx);
   const api = ctx.api;
   let t = 0;
   const frame = (dt = 1 / 30) => {
@@ -235,7 +236,7 @@ check('every gesture Python offers maps to a motion that exists in the page', ()
 });
 
 check('her feelings: every reaction is bounded, never snaps, varies, and fades back (2026-10-28)', () => {
-  for (const name of ['eager', 'delight', 'oops', 'curious', 'proud']) {
+  for (const name of ['eager', 'delight', 'oops', 'curious', 'proud', 'jolt', 'bow', 'gasp', 'victory', 'confident', 'wave', 'startle']) {
     const w = world(); w.ctx.window.EVA_PRESENCE = true;
     let t = 0;
     const step = () => { t += 1 / 30; w.ctx.performance.now = (() => { const c = w.now() + t; return () => c * 1000; })();
@@ -1218,6 +1219,21 @@ check('Anime 3D system: unified state machine transitions across all states with
     }
   }
   assert(w.api.setAvatarState('invalid_state_xyz') === false, 'accepted invalid state');
+});
+
+check('Generative motion: dynamic screen-space pointing solves IK toward targets and settles', () => {
+  const w = world();
+  w.api.setWorld({ cursor: [960, 540], eva: [800, 700, 1000, 1080], screen: [1920, 1080] });
+  assert(w.api.pointAt(1600, 300, 1.2), 'pointAt returned false');
+  let maxElevation = 0;
+  for (let i = 0; i < 40; i++) {
+    const f = w.frame();
+    maxElevation = Math.max(maxElevation, f.o.luaX || 0);
+  }
+  assert(maxElevation > 0.2, `arm did not elevate toward screen target: ${maxElevation}`);
+  for (let i = 0; i < 30; i++) w.frame();
+  const settled = w.frame();
+  assert(Math.abs((settled.o.luaX || 0)) < 0.1, 'did not settle after pointing');
 });
 
 console.log(failures ? `\n${failures} motion check(s) FAILED` : '\nall motion checks passed');

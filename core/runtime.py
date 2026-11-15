@@ -32,6 +32,8 @@ GREETING = re.compile(r"^\s*(hi|hello|hey|hola|namaste)(\s+eva)?[\s!.,?]*$", re.
 # 2026-10-11: moments her body answers (main.py turns each into a gesture).
 THANKS = re.compile(r"\b(thanks|thank you|thankyou|thx|ty|cheers|much appreciated|you'?re (?:the best|awesome|amazing))\b",
                     re.IGNORECASE)
+SURPRISE = re.compile(r"\b(wow|whoa|omg|no way|what the|are you serious|unbelievable|holy cow|yikes)\b|[!]{2,}", re.IGNORECASE)
+HUMOR = re.compile(r"\b(haha|hahaha|lol|lmao|funny|joke|hilarious|rofl)\b", re.IGNORECASE)
 UNCLEAR = re.compile(r"(not sure what you mean|didn'?t (?:quite )?catch|could you (?:say|repeat|clarify)|"
                      r"did you mean|what do you mean|can you rephrase|i don'?t understand)", re.IGNORECASE)
 GREETING_REPLIES = ["Hi! What can I do for you?", "Hello! I'm listening.", "Hey there. What do you need?"]
@@ -210,6 +212,10 @@ class Runtime:
             self._note("me", text)
             if THANKS.search(text):
                 self._moment("thanked")
+            elif SURPRISE.search(text):
+                self._moment("surprise")
+            elif HUMOR.search(text):
+                self._moment("humor")
             if is_stop_phrase(text):
                 self.stop()
                 return
