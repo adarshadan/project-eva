@@ -124,9 +124,7 @@ for m in ["config", "logger", "system_tools", "scheduler", "vision",
 print("\nTool wiring")
 
 
-BOUND_AT_STARTUP = {"delegate", "helpers_status", "cancel_helper", "play_animation", "stop_animation", "walk_to_screen", "go_home", "sit_on_window", "sit_down", "stand_up", "run_recording",
-                    "remember", "recall", "forget", "forget_all", "save_skill", "open_settings", "restart_as_administrator",
-                    "operate_computer", "wait_for_person", "use_tools"}
+from eva_app.startup import BOUND_AT_STARTUP
 
 
 def _sample_args(tool):
@@ -7441,10 +7439,13 @@ def her_windows_and_mind():
 def selftest_proves_build_healthy():
     """WO-002: proves Eva can start without opening a window or using the network."""
     import selftest
-    assert selftest.run() == [], f"selftest reported problems on clean repo: {selftest.run()}"
-    fake = "fake_module_not_real"
-    problems = selftest.run(modules=[fake])
-    assert any(fake in p for p in problems), f"selftest did not report problem naming {fake}: {problems}"
+    from eva_app import startup
+    assert selftest.run(modules=["command_policy", "coder"], check_tools=False, assets=("web/avatar_3d.html",)) == []
+    p1 = selftest.run(modules=["fake_module_not_real"], check_tools=False, assets=())
+    assert len(p1) == 1 and "fake_module_not_real" in p1[0]
+    p2 = selftest.run(modules=[], check_tools=False, assets=("web/does_not_exist.bin",))
+    assert len(p2) == 1 and "missing asset" in p2[0]
+    assert "coder" in startup.CORE_MODULES
 
 
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",

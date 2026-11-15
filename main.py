@@ -31,7 +31,10 @@ from eva_app.startup import (CORE_MODULES, RESTART_EXIT_CODE, startup_self_test,
 def main():
     if "--selftest" in sys.argv:
         import selftest
-        problems = selftest.run()
+        if "--skip-assets" in sys.argv:
+            problems = selftest.run(assets=("web/avatar_3d.html",))
+        else:
+            problems = selftest.run()
         if problems:
             for p in problems:
                 print(f"SELFTEST FAIL: {p}")

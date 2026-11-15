@@ -1,28 +1,15 @@
 """Build verification: proves Eva can start without opening a window or using the network."""
 import importlib
 import os
-import sys
 import tempfile
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def run(modules=None) -> list[str]:
+def run(modules=None, check_tools=True, assets=("web/avatar_3d.html", "web/assets/character.glb")) -> list[str]:
     """Run self-test checks. Returns a list of problem strings ([] = healthy)."""
     problems = []
-
-    # If a test harness stubbed PySide6 or its submodules without real package files,
-    # remove the stubs so real PySide6 modules can load cleanly.
-    stubs = [k for k, m in list(sys.modules.items())
-             if (k == "PySide6" or k.startswith("PySide6.")) and not hasattr(m, "__file__")]
-    if stubs:
-        for k in stubs:
-            del sys.modules[k]
-        try:
-            import PySide6  # noqa: F401
-        except Exception:
-            pass
 
     # a. Import every module in eva_app.startup's module list (reuse that list)
     if modules is None:
@@ -39,22 +26,23 @@ def run(modules=None) -> list[str]:
 
     # b. Import core.toolset and check every registered tool has an implementation
     # or is in the bound-at-startup set
-    try:
-        import core.toolset
-        from core import registry
-        from eva_app.startup import BOUND_AT_STARTUP
-        missing = set(registry.unbound()) - BOUND_AT_STARTUP
-        for n in sorted(missing):
-            problems.append(f"tool {n!r} has no implementation bound")
-        for p in registry.validate():
-            if "has no implementation bound" in p:
-                continue
-            problems.append(p)
-    except Exception as e:
-        problems.append(f"tool validation: {type(e).__name__}: {e}")
+    if check_tools:
+        try:
+            import core.toolset
+            from core import registry
+            from eva_app.startup import BOUND_AT_STARTUP
+            missing = set(registry.unbound()) - BOUND_AT_STARTUP
+            for n in sorted(missing):
+                problems.append(f"tool {n!r} has no implementation bound")
+            for p in registry.validate():
+                if "has no implementation bound" in p:
+                    continue
+                problems.append(p)
+        except Exception as e:
+            problems.append(f"tool validation: {type(e).__name__}: {e}")
 
-    # c. Check web/avatar_3d.html and web/assets/character.glb exist and are non-empty
-    for rel in ("web/avatar_3d.html", "web/assets/character.glb"):
+    # c. Check assets exist and are non-empty
+    for rel in assets:
         path = os.path.join(HERE, *rel.split("/"))
         if not os.path.exists(path):
             problems.append(f"missing asset: {rel}")
