@@ -7544,6 +7544,71 @@ def safe_update_with_health_check_and_rollback():
     assert not any(c[:2] == ["git", "reset"] for c in calls_d), f"unexpected reset: {calls_d}"
     assert "commit_old -> commit_new: OK" in log_content
 
+    # (e) is_eva_process checks: True for cwd == repo and absolute main.py, False for other cwd and updater
+    repo_dummy = r"D:\eva-avatar\eva-avatar"
+    abs_main = os.path.join(repo_dummy, "main.py")
+    assert up.is_eva_process(["python", "main.py"], repo_dummy, repo_dummy) is True
+    assert up.is_eva_process(["python", abs_main], r"C:\other", repo_dummy) is True
+    assert up.is_eva_process(["python", "main.py"], r"C:\other", repo_dummy) is False
+    assert up.is_eva_process(["python", r"tools\update.py"], repo_dummy, repo_dummy) is False
+    assert up.is_eva_process(["python", "tools/update.py"], repo_dummy, repo_dummy) is False
+
+    # (f) fetch failure -> no merge call, Eva started on old, return 3
+    calls_fetch_fail = []
+    def fake_run_ff(cmd, **kwargs):
+        calls_fetch_fail.append(cmd)
+        if cmd == ["git", "status", "--porcelain"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd == ["git", "rev-parse", "--short", "HEAD"]:
+            return types.SimpleNamespace(returncode=0, stdout="commit_old\n", stderr="")
+        if cmd == ["git", "fetch", "origin", "main"]:
+            return types.SimpleNamespace(returncode=1, stdout="", stderr="network down")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with tempfile.TemporaryDirectory() as tmp_ff:
+        res_ff = up.update(run=fake_run_ff, eva_dir=tmp_ff)
+    assert res_ff == 3, f"expected exit code 3, got {res_ff}"
+    assert not any(c[:2] == ["git", "merge"] for c in calls_fetch_fail), f"merge was called: {calls_fetch_fail}"
+    assert any("run.bat" in " ".join(c) for c in calls_fetch_fail), f"Eva was not restarted: {calls_fetch_fail}"
+
+    # (g) heartbeat with commit '' or 'unknown' -> not accepted
+    with tempfile.TemporaryDirectory() as tmp_hb:
+        hb_path = os.path.join(tmp_hb, "heartbeat.json")
+        for bad_commit in ("", "unknown"):
+            with open(hb_path, "w", encoding="utf-8") as f:
+                json.dump({"pid": 1234, "commit": bad_commit, "time": time.time() + 10}, f)
+            assert up.wait_for_heartbeat(tmp_hb, "expected_commit", time.time(), timeout=0.01) is False
+
+    # (h) requirements changed -> long wait (600s) used
+    calls_req = []
+    waited_timeout = []
+    def fake_run_req(cmd, **kwargs):
+        calls_req.append(cmd)
+        if cmd == ["git", "status", "--porcelain"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd == ["git", "rev-parse", "--short", "HEAD"]:
+            c_val = "commit_new\n" if any("FETCH_HEAD" in " ".join(c) for c in calls_req) else "commit_old\n"
+            return types.SimpleNamespace(returncode=0, stdout=c_val, stderr="")
+        if cmd == ["git", "fetch", "origin", "main"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd == ["git", "merge", "--ff-only", "FETCH_HEAD"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if len(cmd) >= 5 and cmd[:3] == ["git", "diff", "--name-only"]:
+            return types.SimpleNamespace(returncode=0, stdout="requirements.txt\n", stderr="")
+        if len(cmd) >= 3 and cmd[1] == "main.py" and cmd[2] == "--selftest":
+            return types.SimpleNamespace(returncode=0, stdout="SELFTEST OK", stderr="")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with tempfile.TemporaryDirectory() as tmp_req:
+        orig_wait = up.wait_for_heartbeat
+        try:
+            up.wait_for_heartbeat = lambda d, c, t, timeout=90, sleep_fn=time.sleep: (waited_timeout.append(timeout) or True)
+            res_req = up.update(run=fake_run_req, eva_dir=tmp_req, wait_heartbeat=90)
+            assert res_req == 0
+            assert waited_timeout == [600], f"expected timeout 600, got {waited_timeout}"
+        finally:
+            up.wait_for_heartbeat = orig_wait
+
 
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",
                    animation_follows_the_task),
