@@ -53,11 +53,13 @@ def default_run(cmd, cwd=None, **kwargs):
         for p in psutil.process_iter(["pid", "cmdline"]):
             try:
                 if p.pid != my_pid:
+                    cmdline = p.info.get("cmdline") or []
+                    if not any("main.py" in arg for arg in cmdline):
+                        continue
                     try:
                         proc_cwd = p.cwd()
-                    except (psutil.AccessDenied, psutil.NoSuchProcess):
+                    except (psutil.AccessDenied, psutil.NoSuchProcess, Exception):
                         proc_cwd = None
-                    cmdline = p.info.get("cmdline") or []
                     if is_eva_process(cmdline, proc_cwd, REPO_ROOT):
                         eva_procs.append(p)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -170,7 +172,10 @@ def update(run=default_run, eva_dir=None, wait_heartbeat=90, ref="main", sleep_f
     # 4. run python main.py --selftest; if it fails -> git reset --hard <old>, start Eva, exit 4
     new_rev = run(["git", "rev-parse", "--short", "HEAD"])
     new_commit = new_rev.stdout.strip() or ref
-    selftest_res = run([sys.executable, "main.py", "--selftest"])
+    py_exec = os.path.join(REPO_ROOT, "venv", "Scripts", "python.exe")
+    if not os.path.exists(py_exec):
+        py_exec = sys.executable
+    selftest_res = run([py_exec, "main.py", "--selftest"])
     if selftest_res.returncode != 0:
         err = selftest_res.stdout or selftest_res.stderr
         print(f"Selftest failed:\n{err}")
