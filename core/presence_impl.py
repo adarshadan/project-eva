@@ -40,6 +40,12 @@ ALIASES = {
     "tap": "click", "press": "click", "clean": "tidy",
     "walk": "walk_taskbar", "stroll": "walk_taskbar",
     "type": "work", "typing": "work",
+    "double_nod": "nod_double", "tilt_head": "tilt",
+    "cross_arms": "crossed_arms", "fold_arms": "crossed_arms",
+    "behind_back": "hands_behind_back", "chin": "finger_chin", "finger_to_chin": "finger_chin",
+    "giggle": "hand_mouth", "gasp": "hand_mouth", "hand_over_mouth": "hand_mouth",
+    "double_take": "jolt", "lean": "lean_in", "gentle_wave": "wave_gentle",
+    "peace_sign": "peace",
 }
 
 

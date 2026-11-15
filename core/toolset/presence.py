@@ -13,7 +13,11 @@ GESTURES = ["wave", "hello", "dance", "twirl", "peace", "pose", "stretch", "fing
             "fly_loop", "nap", "walk_taskbar", "jump",
             "clap", "facepalm", "heart", "shh", "check_watch", "impatient", "scratch_head", "peer", "carry",
             "paper_plane", "wipe_brow", "fist_pump", "tada", "salute", "tap_head", "sneeze", "hum", "shoo",
-            "rewind", "checklist", "yawn", "look_around"]
+            "rewind", "checklist", "yawn", "look_around",
+            "nod_double", "nod_solemn", "tilt", "look_away", "jolt", "lean_in",
+            "hands_behind_back", "crossed_arms", "finger_chin", "victory", "hand_mouth",
+            "iconic_size", "iconic_growth", "wave_gentle", "deictic_point",
+            "bow_eshaku", "bow_keirei", "bow_saikeirei", "startle", "posture_open", "posture_closed"]
 
 register("play_animation", "Play a gesture or animation: " + ", ".join(GESTURES) + ". Any other name is "
          "mapped to the closest one and the result says which played. walk_taskbar strolls along "
