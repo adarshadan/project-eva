@@ -7448,6 +7448,103 @@ def selftest_proves_build_healthy():
     assert "coder" in startup.CORE_MODULES
 
 
+def safe_update_with_health_check_and_rollback():
+    """WO-003: tools/update.py refuses dirty trees, rolls back on selftest failure
+    or missing heartbeat, and logs healthy updates."""
+    from tools import update as up
+    import types
+    import tempfile
+    import os
+    import json
+    import time
+
+    # (a) dirty tree -> refuses (exit 2), nothing else called
+    calls_a = []
+    def fake_run_a(cmd, **kwargs):
+        calls_a.append(cmd)
+        if cmd == ["git", "status", "--porcelain"]:
+            return types.SimpleNamespace(returncode=0, stdout=" M core/agent.py\n?? untracked.txt\n", stderr="")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    res_a = up.update(run=fake_run_a)
+    assert res_a == 2, f"expected exit code 2, got {res_a}"
+    assert calls_a == [["git", "status", "--porcelain"]], f"called more than git status: {calls_a}"
+
+    # (b) selftest fails -> reset to old and Eva started (exit 4)
+    calls_b = []
+    def fake_run_b(cmd, **kwargs):
+        calls_b.append(cmd)
+        if cmd == ["git", "status", "--porcelain"]:
+            return types.SimpleNamespace(returncode=0, stdout="?? untracked.txt\n", stderr="")
+        if cmd == ["git", "rev-parse", "--short", "HEAD"]:
+            return types.SimpleNamespace(returncode=0, stdout="commit_old\n", stderr="")
+        if cmd == ["git", "fetch", "origin", "main"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd == ["git", "merge", "--ff-only", "FETCH_HEAD"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if len(cmd) >= 3 and cmd[1] == "main.py" and cmd[2] == "--selftest":
+            return types.SimpleNamespace(returncode=1, stdout="SELFTEST FAIL: broken", stderr="")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with tempfile.TemporaryDirectory() as tmp_b:
+        res_b = up.update(run=fake_run_b, eva_dir=tmp_b)
+    assert res_b == 4, f"expected exit code 4, got {res_b}"
+    assert ["git", "reset", "--hard", "commit_old"] in calls_b, f"reset not called: {calls_b}"
+    assert any("run.bat" in " ".join(c) for c in calls_b), f"Eva not started: {calls_b}"
+
+    # (c) no heartbeat -> reset to old and Eva started (exit 5)
+    calls_c = []
+    def fake_run_c(cmd, **kwargs):
+        calls_c.append(cmd)
+        if cmd == ["git", "status", "--porcelain"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd == ["git", "rev-parse", "--short", "HEAD"]:
+            return types.SimpleNamespace(returncode=0, stdout="commit_old\n", stderr="")
+        if cmd == ["git", "fetch", "origin", "main"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd == ["git", "merge", "--ff-only", "FETCH_HEAD"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if len(cmd) >= 3 and cmd[1] == "main.py" and cmd[2] == "--selftest":
+            return types.SimpleNamespace(returncode=0, stdout="SELFTEST OK", stderr="")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with tempfile.TemporaryDirectory() as tmp_c:
+        res_c = up.update(run=fake_run_c, eva_dir=tmp_c, wait_heartbeat=0)
+    assert res_c == 5, f"expected exit code 5, got {res_c}"
+    assert ["git", "reset", "--hard", "commit_old"] in calls_c, f"reset not called: {calls_c}"
+    assert any("run.bat" in " ".join(c) for c in calls_c), f"Eva not started: {calls_c}"
+
+    # (d) healthy -> no reset, log line written (exit 0)
+    calls_d = []
+    def fake_run_d(cmd, **kwargs):
+        calls_d.append(cmd)
+        if cmd == ["git", "status", "--porcelain"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd == ["git", "rev-parse", "--short", "HEAD"]:
+            c_val = "commit_new\n" if any("FETCH_HEAD" in " ".join(c) for c in calls_d) else "commit_old\n"
+            return types.SimpleNamespace(returncode=0, stdout=c_val, stderr="")
+        if cmd == ["git", "fetch", "origin", "main"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd == ["git", "merge", "--ff-only", "FETCH_HEAD"]:
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if len(cmd) >= 3 and cmd[1] == "main.py" and cmd[2] == "--selftest":
+            return types.SimpleNamespace(returncode=0, stdout="SELFTEST OK", stderr="")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    with tempfile.TemporaryDirectory() as tmp_d:
+        hb_file = os.path.join(tmp_d, "heartbeat.json")
+        with open(hb_file, "w", encoding="utf-8") as f:
+            json.dump({"pid": 9999, "commit": "commit_new", "time": time.time() + 10}, f)
+        res_d = up.update(run=fake_run_d, eva_dir=tmp_d, wait_heartbeat=5)
+        log_file = os.path.join(tmp_d, "updates.log")
+        assert os.path.exists(log_file), "updates.log was not written"
+        log_content = open(log_file, "r", encoding="utf-8").read()
+
+    assert res_d == 0, f"expected exit code 0, got {res_d}"
+    assert not any(c[:2] == ["git", "reset"] for c in calls_d), f"unexpected reset: {calls_d}"
+    assert "commit_old -> commit_new: OK" in log_content
+
+
 for label, fn in [("the animation pose follows the task (tool and skill both map to real poses)",
                    animation_follows_the_task),
                   ("the agent drives the activity pose: thinking -> per tool -> idle",
@@ -7549,7 +7646,9 @@ for label, fn in [("the animation pose follows the task (tool and skill both map
                    ("windows are scenery she never covers, and the mind is rare, polite and private",
                     her_windows_and_mind),
                    ("selftest proves build healthy and catches unimportable modules",
-                    selftest_proves_build_healthy)]:
+                    selftest_proves_build_healthy),
+                   ("safe update refuses dirty tree, rolls back on failure, and logs",
+                    safe_update_with_health_check_and_rollback)]:
     check(label, fn)
 
 print()

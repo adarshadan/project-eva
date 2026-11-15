@@ -1,11 +1,30 @@
 """Long-running health: staying above other windows without flicker, garbage collection on the
 GUI thread, process vitals, the GUI watchdog, the one-time flicker measurement, lip sync."""
 import gc
+import json
+import os
+import subprocess
 import time
 
 import logger
 
 log = logger.get_logger("__main__")
+
+
+def _git_commit_short():
+    try:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_dir,
+            stderr=subprocess.DEVNULL,
+            creationflags=flags,
+            text=True,
+        ).strip()
+        return out or "unknown"
+    except Exception:
+        return "unknown"
 
 
 def install(ctx):
@@ -115,5 +134,27 @@ def install(ctx):
     speech_poll.timeout.connect(lambda: avatar.set_speaking(voice.is_speaking()))
     speech_poll.start(120)
 
-    ctx.timers += [gc_timer, zorder_timer, speech_poll]
+    # Heartbeat (WO-003): while Eva runs, a timer writes ~/.eva/heartbeat.json every 10 s
+    commit_hash = _git_commit_short()
+    pid = os.getpid()
+    eva_dir = os.path.expanduser("~/.eva")
+    os.makedirs(eva_dir, exist_ok=True)
+    heartbeat_path = os.path.join(eva_dir, "heartbeat.json")
+
+    def heartbeat_tick():
+        try:
+            data = {"pid": pid, "commit": commit_hash, "time": time.time()}
+            tmp = heartbeat_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            os.replace(tmp, heartbeat_path)
+        except Exception as e:
+            log.warning(f"Heartbeat write failed: {e}")
+
+    heartbeat_tick()
+    heartbeat_timer = QTimer()
+    heartbeat_timer.timeout.connect(heartbeat_tick)
+    heartbeat_timer.start(10000)
+
+    ctx.timers += [gc_timer, zorder_timer, speech_poll, heartbeat_timer]
     ctx.vitals = _vitals

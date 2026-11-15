@@ -14,6 +14,9 @@ Windows 10/11, Python 3.10+.
 3. First time only: `playwright install chromium` inside that environment, for browser tasks.
 4. Give Eva your NVIDIA API key: right-click her tray icon → **Set API key** (stored encrypted for
    your Windows user, so it survives updates), or run `set_key.bat`.
+5. Updating Eva: double-click `update.bat` (or run `python tools\update.py`). It updates to the latest
+   version on `main`, runs `--selftest`, checks that Eva stays running, and automatically rolls back if
+   the new version fails to start or stay up.
 
 Talk to her, or right-click the tray icon → **Chat** to type. Say **"stop"** at any time.
 
