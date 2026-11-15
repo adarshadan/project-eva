@@ -27,15 +27,13 @@ CORE = (
     "focus_window", "launch_app", "close_window", "click_element", "type_into_element", "type_text",
     "send_hotkey", "scroll", "click_coords", "operate_computer", "wait_for_person", "media_control",
     # web & tabs
-    "browser_open", "browser_act", "read_web_page", "web_search", "navigate_browser", "switch_browser_tab", "close_browser_tab", "listen_internal_audio",
-    # activities & body animations
-    "start_repeating", "stop_activity", "adjust_activity", "play_animation", "stop_animation",
+    "browser_open", "browser_act", "read_web_page", "web_search", "switch_browser_tab", "close_browser_tab", "listen_internal_audio",
     # files and shell
     "find_files", "list_folder", "read_file", "write_file", "move_file", "create_folder", "run_command",
     "undo_last_change",
     # memory, skills, time
     "remember", "recall", "forget", "find_skill", "load_skill", "read_skill_file", "save_skill",
-    "get_current_time", "notify", "schedule_reminder",
+    "get_current_time", "notify", "schedule_reminder", "stop_activity",
     "use_tools",
 )
 

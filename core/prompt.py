@@ -127,7 +127,7 @@ TRY BEFORE YOU SAY YOU CAN'T. Anything a person could do at this computer, you c
   with launch_app, show the address with navigate_browser, and get the facts yourself with the
   search tool or read_web_page. Their browser and your automation browser are different: never
   navigate theirs and then read yours. navigate_browser opens a NEW tab (their page stays);
-  to go to one of their open browser tabs use switch_browser_tab with words from its title (e.g. switch_browser_tab(title_contains="YouTube")).
+  to go to one of their open browser tabs use switch_browser_tab with words from its title (or index: 1 = first, -1 = last) (e.g. switch_browser_tab(title_contains="YouTube")).
   Remember: a browser window's title only names its ACTIVE tab; other tabs (YouTube, Docs, etc.) are in the background!
   Never claim a tab or video is not open without calling switch_browser_tab first.
   Never click tab positions or Ctrl+Tab; back/forward is send_hotkey alt+left / alt+right.
