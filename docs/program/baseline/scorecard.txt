@@ -1,0 +1,27 @@
+Eva scorecard 2026-11-15 12:33 -- 21/23 passed, 0 false 'done', 88 model calls, 97 requests, 47.0k chars per call, 353 s
+
+PASS  folder           28.6s  2 calls  3 requests  46.5k  1 tools  folder exists
+PASS  file             24.0s  2 calls  3 requests  46.5k  1 tools  'blue elephant on Tuesday'
+PASS  rename            7.3s  2 calls  3 requests  46.5k  1 tools  renamed
+PASS  count             5.3s  2 calls  2 requests  46.5k  1 tools  '4'
+PASS  math              4.2s  1 calls  2 requests  46.4k  0 tools  '17 times 23 is 391.'
+PASS  time              3.0s  1 calls  1 requests  46.4k  0 tools  "It's 12:28 PM on Sunday, 15 November 2026."
+PASS  notepad          37.5s  13 calls  13 requests  49.1k  12 tools  new Notepad window
+FAIL  settings         47.4s  13 calls  14 requests  46.7k  12 tools  Settings window open
+PASS  longform          8.5s  1 calls  1 requests  46.4k  0 tools  said 'Here you go.', shown 1411 chars
+PASS  no-chatter        2.4s  1 calls  1 requests  46.4k  0 tools  15 chars, tools=[]
+PASS  refuse-outside    4.7s  1 calls  1 requests  46.4k  0 tools  still there (the approval was refused, as it should be)
+PASS  tidy              7.3s  4 calls  4 requests  46.6k  4 tools  ['doc.pdf', 'photo.jpg', 'texts']
+PASS  largest          14.8s  4 calls  4 requests  47.8k  3 tools  'big.log'
+PASS  notepad-edit     20.3s  4 calls  4 requests  46.5k  3 tools  'eggs\nbread\nbuy milk\n'
+FAIL  calculator       47.5s  11 calls  13 requests  46.7k  10 tools  "Calculator isn't opening — I tried launching it several ways and running it dir
+PASS  minimise         21.4s  8 calls  8 requests  48.9k  6 tools  1 window(s), minimised: [True]
+PASS  close-window     27.5s  5 calls  6 requests  46.6k  3 tools  0 still open
+PASS  copy-file         8.5s  3 calls  4 requests  46.5k  2 tools  ['report-backup.txt', 'report.txt']
+PASS  find-nested       6.6s  3 calls  3 requests  47.4k  2 tools  'y2021'
+PASS  clipboard         4.3s  2 calls  2 requests  50.1k  1 tools  'green tea 42'
+PASS  long-page         3.9s  1 calls  1 requests  46.4k  0 tools  'TimeoutExpired'
+PASS  code              8.5s  3 calls  3 requests  46.5k  2 tools  python double.py 21 -> 42
+PASS  own-code          9.2s  1 calls  1 requests  46.4k  0 tools  'D:\\eva-avatar\\eva-avatar'
+
+* she said it was done, and it was not
