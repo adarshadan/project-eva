@@ -1207,7 +1207,26 @@ def launch_app(name_or_path: str, argument: str = ""):
         return {"ok": False, "error": str(e)}
 
 
-def navigate_browser(window_handle: int, url: str, new_tab: bool = True):
+def _find_browser_window(title_contains: str = "") -> int:
+    """Finds an open browser window handle (Opera, Chrome, Brave, Edge, Firefox).
+    If title_contains is given, scans tabs across all open browsers to locate the right window."""
+    try:
+        windows = list_windows().get("windows", [])
+        browsers = [w for w in windows if any(b in (w.get("title") or "").lower() for b in ("opera", "chrome", "brave", "edge", "firefox", "vivaldi"))]
+        want = str(title_contains or "").strip().lower()
+        if want:
+            for b in browsers:
+                tabs = _browser_tabs(b["handle"])
+                if any(want in (nm or "").lower() for nm, _ in tabs):
+                    return b["handle"]
+        if browsers:
+            return browsers[0]["handle"]
+    except Exception:
+        pass
+    return 0
+
+
+def navigate_browser(window_handle: int = 0, url: str = "", new_tab: bool = True):
     """Natively drive ANY browser the person already has open -- Opera,
     Chrome, Edge, Firefox, anything with an address bar: focus its window,
     open a NEW TAB (Ctrl+T) unless told to reuse the current one, select the
@@ -1215,6 +1234,16 @@ def navigate_browser(window_handle: int, url: str, new_tab: bool = True):
     is never overwritten by default (eva.log 2026-10-11 13:16: "you should
     not have overwritten the browser URL"). Verified by the window title
     changing, since browsers title their window after the active tab."""
+    if not window_handle:
+        window_handle = _find_browser_window()
+    if not window_handle:
+        import webbrowser
+        try:
+            webbrowser.open(url)
+            return {"ok": True, "delivered": True, "verified": True, "note": "opened in default browser"}
+        except Exception as e:
+            return {"ok": False, "error": f"no open browser found and could not open default browser: {e}"}
+
     res = focus_window(window_handle)
     if not res.get("ok"):
         return res
@@ -1238,6 +1267,57 @@ def navigate_browser(window_handle: int, url: str, new_tab: bool = True):
     return {"ok": True, "delivered": True, "verified": changed, "new_tab": bool(new_tab),
             "window_title": after,
             **({} if changed else {"note": "the window title did not change yet -- the page may still be loading"})}
+
+
+def close_browser_tab(window_handle: int = 0, title_contains: str = ""):
+    """Closes one tab of a browser the person has open, by words in its title,
+    or the current active tab if title_contains is empty.
+    Never closes the entire browser window unless it was the only tab remaining."""
+    if not window_handle:
+        window_handle = _find_browser_window(title_contains=title_contains)
+    if not window_handle:
+        return {"ok": False, "error": "No open browser windows found to close tab."}
+
+    _force_foreground(window_handle)
+    time.sleep(0.2)
+
+    closed_via_button = False
+    want = str(title_contains or "").strip().lower()
+    tabs = _browser_tabs(window_handle) if (want or window_handle) else []
+    
+    if want and tabs:
+        names = [t[0] for t in tabs]
+        pick = next((i for i, nm in enumerate(names) if want in nm.lower()), None)
+        if pick is not None:
+            tab_el = tabs[pick][1]
+            try:
+                for btn in tab_el.descendants(control_type="Button"):
+                    bname = (btn.element_info.name or "").lower()
+                    if "close" in bname or not bname:
+                        btn.invoke()
+                        closed_via_button = True
+                        break
+            except Exception:
+                pass
+            if not closed_via_button:
+                _select_tab(tab_el)
+                time.sleep(0.2)
+
+    if not closed_via_button:
+        # Close active tab with Ctrl+W
+        pyautogui.hotkey("ctrl", "w")
+    time.sleep(0.35)
+
+    # Check if window is still open
+    still_open = any(w._hWnd == window_handle for w in gw.getAllWindows())
+    after_title = _window_title(window_handle) if still_open else ""
+    return {
+        "ok": True,
+        "closed_tab": True,
+        "window_alive": still_open,
+        "browser_title": after_title,
+        "note": "closed the browser tab safely" if still_open else "closed the tab; that was the last tab so the browser window closed."
+    }
 
 
 def _window_title(window_handle):
@@ -1701,7 +1781,7 @@ def send_hotkey(keys: str, window_handle: int = None):
     return {"ok": True, "delivered": True, "verified": False}
 
 
-def close_window(window_handle: int):
+def close_window(window_handle: int, force: bool = False):
     """Closes ONE named window with WM_CLOSE.
 
     The only way to close anything used to be send_hotkey("alt+f4"), which
@@ -1721,6 +1801,24 @@ def close_window(window_handle: int):
         return {"ok": False,
                 "error": "that window no longer exists -- it was already closed or its handle "
                          "changed. Call list_windows for the current handles."}
+
+    # Browser Safety Guard: protect users from accidentally destroying their entire browser session
+    if not force:
+        title_lower = (title or "").lower()
+        if any(b in title_lower for b in ("opera", "chrome", "brave", "edge", "firefox", "vivaldi")):
+            tabs = _browser_tabs(window_handle)
+            if len(tabs) > 1:
+                return {
+                    "ok": False,
+                    "prevented_disaster": True,
+                    "error": (
+                        f"Safety refusal: '{title}' is an open web browser with {len(tabs)} tabs. "
+                        "Calling close_window will kill the entire browser application and all open tabs! "
+                        "To close a specific website or tab, use close_browser_tab(title_contains=...) instead. "
+                        "If you genuinely intend to close the entire browser application, call close_window(window_handle, force=True)."
+                    )
+                }
+
     WM_CLOSE = 0x0010
     try:
         ctypes.windll.user32.PostMessageW(ctypes.c_void_p(window_handle), WM_CLOSE, 0, 0)

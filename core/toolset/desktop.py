@@ -62,10 +62,11 @@ register("restore_foreground", "Give keyboard focus back to a window after worki
 # WM_CLOSE asks the app to close; an app with unsaved work answers with its
 # own "save changes?" prompt, so this is not classed as destructive (the
 # person's rule). Change the effect to E.DESTROY to make every close ask.
-register("close_window", "Close one window by handle. Never use send_hotkey('alt+f4') for this -- that "
+register("close_window", "Close one non-browser window by handle. Never use send_hotkey('alt+f4') for this -- that "
          "goes to whatever is in front. If the app asks about unsaved changes the result says "
-         "closed=false: look at the screen before saying it closed.",
-         {"window_handle": HANDLE}, ["window_handle"],
+         "closed=false: look at the screen before saying it closed. NEVER use this to close a website or tab -- "
+         "use close_browser_tab for tabs. To terminate an entire browser app and all tabs, pass force=true.",
+         {"window_handle": HANDLE, "force": BOOL("Force close even if it is a browser with multiple tabs.")}, ["window_handle"],
          surface=S.WINDOW, effect=E.MODIFY, fn=dc.close_window, deadline=15,
          verb="close", locus="caption_close", approach="walk", describe=lambda a: "Closing a window")
 register("launch_app", "Start an installed program by its plain name ('notepad', 'spotify', 'brave') "
@@ -77,11 +78,18 @@ register("launch_app", "Start an installed program by its plain name ('notepad',
          surface=S.SYSTEM, effect=E.INTERACT, fn=dc.launch_app, deadline=40, verb="open",
          describe=lambda a: f"Opening {_short(_base(a.get('name_or_path')))}")
 register("navigate_browser", "Show a URL in a browser the person ALREADY has open, in a NEW TAB (their "
-         "open page is kept); new_tab=false only when they ask to change the current page. You cannot read "
-         "that browser's page: to read the same page yourself use read_web_page with the same URL. Never "
-         "follow it with browser_extract, which reads YOUR browser.",
-         {"window_handle": HANDLE, "url": STR(), "new_tab": BOOL("Default true.")}, ["window_handle", "url"],
-         surface=S.SCREEN, effect=E.INTERACT, fn=dc.navigate_browser, deadline=40, verb="open")
+         "open page is kept); new_tab=false only when they ask to change the current page. window_handle is "
+         "optional (it finds the open browser automatically). You cannot read that browser's page: to read the "
+         "same page yourself use read_web_page with the same URL.",
+         {"url": STR(), "window_handle": HANDLE, "new_tab": BOOL("Default true.")}, ["url"],
+         surface=S.SCREEN, effect=E.INTERACT, fn=dc.navigate_browser, deadline=40, verb="open",
+         describe=lambda a: f"Opening {_short(a.get('url') or 'page', 30)}")
+register("close_browser_tab", "Close a website or browser tab by words in its title ('Times of India', 'YouTube', etc.), "
+         "or close the currently active tab. Use this whenever the person asks to 'close this website', 'close the tab', "
+         "or 'close this page'. NEVER use close_window on a browser -- close_window kills the whole browser and all tabs.",
+         {"window_handle": HANDLE, "title_contains": STR("Words in the tab's title to close (optional).")}, [],
+         surface=S.SCREEN, effect=E.MODIFY, fn=dc.close_browser_tab, deadline=20, verb="close",
+         describe=lambda a: f"Closing the {_short(a.get('title_contains') or 'current', 20)} tab")
 register("switch_browser_tab", "Switch to one of the tabs of a browser the person has open, by words in the "
          "tab's title ('MSN', 'YouTube', 'DeepSeek') or by position (index 1 = first, -1 = last, -2 = second "
          "to last). It reads the real tab strip, so 'the last tab' is index -1. Use this instead of "

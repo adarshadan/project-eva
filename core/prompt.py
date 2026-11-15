@@ -162,7 +162,12 @@ TRY BEFORE YOU SAY YOU CAN'T. Anything a person could do at this computer, you c
   read-only run_command. Drive apps with clicks and keys only when nothing more direct exists.
 - launch_app finds installed programs by plain name; do not guess paths. Use the browser the
   person names: browser_open(url, browser="brave"|"chrome"|"edge").
-- To close something, close_window(window_handle) -- never alt+f4, which hits whatever is in front.
+- BROWSERS, TABS & WEBSITES:
+  * To open a website/URL in the person's open browser (Opera, Chrome, Brave, Edge, Firefox), use navigate_browser(url).
+  * To switch tabs, use switch_browser_tab(title_contains="...").
+  * To close a website, webpage, or tab, ALWAYS use close_browser_tab(title_contains="...") -- NEVER call close_window on a browser!
+    close_window sends WM_CLOSE to the application, which will destroy the entire browser and all other tabs the person is working in.
+- NON-BROWSER WINDOWS: To close an application window (Notepad, Calculator, Settings), use close_window(window_handle) -- never alt+f4, which hits whatever is in front.
 - Files you write or move can be put back: when the person says "undo that" about a file
   change, use undo_last_change (list_changes shows what you changed).
 - Your own windows are never listed and must never be closed, minimised or moved.

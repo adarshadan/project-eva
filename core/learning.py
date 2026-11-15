@@ -104,6 +104,16 @@ class Learner:
             return None
         if time.time() - self._last < MIN_GAP_SECONDS:
             return None
+        # Protect conversational quota: if recent request count is high, defer review to avoid 429 lockouts
+        try:
+            import providers
+            now = time.monotonic()
+            recent_nvidia = sum(1 for t in providers._recent.get("nvidia", []) if now - t < 60.0)
+            if recent_nvidia > 10:
+                log.info("Skill review deferred to preserve API quota for live conversation.")
+                return None
+        except Exception:
+            pass
         if s.get("ended_unverified"):
             # eva.log 2026-10-11 13:54: "close-window-by-click" was saved from
             # clicks that never closed the window. Only what worked is a skill.

@@ -330,7 +330,12 @@ class Agent:
 
         def execute():
             if tool.deadline:
-                out = deadline_mod.run_with_deadline(name, lambda: tool.fn(**args), tool.deadline)
+                try:
+                    sec_arg = float(args.get("seconds", 0) or 0)
+                except (TypeError, ValueError):
+                    sec_arg = 0.0
+                slow_after = max(deadline_mod.SLOW_SECONDS, sec_arg + 4.0)
+                out = deadline_mod.run_with_deadline(name, lambda: tool.fn(**args), tool.deadline, slow_after=slow_after)
             else:
                 out = tool.fn(**args)
             if tool.record_step and self._record_step:
@@ -1029,7 +1034,12 @@ def claim_without_action(reply, turn_text, results):
 
 _SCREEN_SURFACES = {"screen", "window", "browser"}
 # Steps that end by looking for themselves: their own result is the check.
-_SELF_CHECKING = {"operate_computer", "wait_for_person"}
+_SELF_CHECKING = {
+    "operate_computer", "wait_for_person",
+    "start_repeating", "stop_activity", "adjust_activity",
+    "navigate_browser", "close_browser_tab", "switch_browser_tab",
+    "media_key", "media_control", "play_animation", "stop_animation"
+}
 
 
 def needs_final_look(reply, results):

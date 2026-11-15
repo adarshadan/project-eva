@@ -310,6 +310,9 @@ class Mind:
         due = now >= self._next_at
         if not (due or self._pending_event):
             return False
+        if snap.get("busy"):
+            self._next_at = now + 30.0
+            return False
         if due and not self._pending_event and _num(snap.get("idle")) >= AWAY_IDLE_S:
             self._next_at = now + self.min_gap                 # nobody is there: look again later
             return False

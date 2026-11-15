@@ -513,6 +513,10 @@ def call(messages: list[dict], system_prompt: str, tools: list, attempts: int = 
                     log.warning(f"Model {providers.describe(ref)} still busy after {tries} tries -- "
                                 f"using {providers.describe(refs[i + 1])}")
                     break
+                if isinstance(e, RateLimitError) and not final:
+                    _resting[ref] = time.monotonic() + 30.0
+                    log.warning(f"Model {providers.describe(ref)} rate-limited (429) -- switching immediately to fallback {providers.describe(refs[i + 1])}")
+                    break
                 told = providers.retry_after(e) if isinstance(e, RateLimitError) else 0.0
                 if isinstance(e, RateLimitError) and not told:
                     # 2026-10-28: NVIDIA's 429 carries no Retry-After, and a fast model met the limit again

@@ -141,6 +141,11 @@ def rpm(name: str) -> int:
         return 0
 
 
+def _is_audio(ref: str) -> bool:
+    r = str(ref or "").lower()
+    return "/asr" in r or "/tts" in r or ":asr" in r or ":tts" in r
+
+
 def pace(ref: str, clock=None, sleep=None) -> float:
     """Waits, if needed, so this provider stays under its budget. Returns the seconds waited."""
     import time as _t
@@ -153,11 +158,12 @@ def pace(ref: str, clock=None, sleep=None) -> float:
         return 0.0
     limit = rpm(name)
     waited = 0.0
+    is_aud = _is_audio(ref)
     while True:
         with _pace_lock:
             now = clock()
             times = [t for t in _recent.get(name, []) if now - t < 60.0]
-            hold = _hold_until.get(name, 0.0) - now
+            hold = (_hold_until.get(f"{name}:audio", 0.0) - now) if is_aud else (_hold_until.get(name, 0.0) - now)
             burst_gap = 0.0 if is_test else _MIN_BURST_INTERVAL.get(name, 0.0)
             burst_wait = (burst_gap - (now - times[-1])) if (times and burst_gap and (now - times[-1]) < burst_gap) else 0.0
             if hold > 0:
@@ -191,7 +197,10 @@ def hold(ref: str, seconds: float, clock=None):
     except Exception:
         return
     with _pace_lock:
-        _hold_until[name] = max(_hold_until.get(name, 0.0), clock() + max(0.0, float(seconds)))
+        if _is_audio(ref):
+            _hold_until[f"{name}:audio"] = max(_hold_until.get(f"{name}:audio", 0.0), clock() + max(0.0, float(seconds)))
+        else:
+            _hold_until[name] = max(_hold_until.get(name, 0.0), clock() + max(0.0, float(seconds)))
 
 
 def retry_after(error) -> float:
