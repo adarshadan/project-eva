@@ -78,6 +78,15 @@ def default_run(cmd, cwd=None, **kwargs):
                 pass
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
+    if len(cmd) >= 3 and cmd[0] == "cmd.exe" and cmd[1] == "/c" and "start" in cmd:
+        return subprocess.run(
+            cmd,
+            cwd=cwd or REPO_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            **kwargs
+        )
+
     return subprocess.run(
         cmd,
         cwd=cwd or REPO_ROOT,
