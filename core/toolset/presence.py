@@ -17,7 +17,10 @@ GESTURES = ["wave", "hello", "dance", "twirl", "peace", "pose", "stretch", "fing
             "nod_double", "nod_solemn", "tilt", "look_away", "jolt", "lean_in",
             "hands_behind_back", "crossed_arms", "finger_chin", "victory", "hand_mouth",
             "iconic_size", "iconic_growth", "wave_gentle", "deictic_point",
-            "bow_eshaku", "bow_keirei", "bow_saikeirei", "startle", "posture_open", "posture_closed"]
+            "bow_eshaku", "bow_keirei", "bow_saikeirei", "startle", "posture_open", "posture_closed",
+            "floss", "moonwalk", "salsa", "the_shoot", "hype", "smeeze", "woah", "dougie",
+            "citirokk", "swagg_bounce", "toosie_slide", "running_man", "cosby_walk", "griddy",
+            "best_mates", "billy_bounce", "orange_justice"]
 
 register("play_animation", "Play a gesture or animation: " + ", ".join(GESTURES) + ". Any other name is "
          "mapped to the closest one and the result says which played. walk_taskbar strolls along "

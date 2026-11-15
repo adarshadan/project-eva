@@ -1205,6 +1205,30 @@ check('Anime 3D system: all new procedural anime gestures execute, stay bounded,
   }
 });
 
+check('Anime 3D system: all 16 procedural pop-culture dances execute, stay bounded, and return to rest', () => {
+  const DANCE_GESTURES = [
+    'p_floss', 'p_dance_moonwalk', 'p_salsa', 'p_the_shoot', 'p_smeeze', 'p_woah',
+    'p_dougie', 'p_citirokk', 'p_swagg_bounce', 'p_toosie_slide', 'p_running_man',
+    'p_cosby_walk', 'p_griddy', 'p_best_mates', 'p_billy_bounce', 'p_orange_justice'
+  ];
+  for (const g of DANCE_GESTURES) {
+    const w = world();
+    assert(w.api.play(g), `could not play ${g}`);
+    const dur = w.api.PROC[g].dur;
+    const steps = Math.ceil(dur * 30) + 10;
+    for (let i = 0; i < steps; i++) {
+      const f = w.frame();
+      for (const ch of ['luaX', 'ruaX', 'luaZ', 'ruaZ', 'llaY', 'rlaY', 'headX', 'headY', 'headZ', 'spineX', 'spineY', 'spineZ']) {
+        if (typeof f.o[ch] === 'number') {
+          assert(Math.abs(f.o[ch]) < 3.2, `dance ${g} channel ${ch} out of bounds: ${f.o[ch]}`);
+        }
+      }
+    }
+    const endF = w.frame();
+    assert(!w.api.gesture(), `dance ${g} did not finish within expected time`);
+  }
+});
+
 check('Anime 3D system: unified state machine transitions across all states without snapping', () => {
   const STATES = ['idle', 'listening', 'processing', 'speaking', 'success', 'error', 'extended_idle'];
   const w = world();
