@@ -12,8 +12,8 @@ The Director relays "WO-xxx ready" to the Program Manager; nothing else is neede
 | WO | Title | Stage | Status |
 |---|---|---|---|
 | WO-001 | Baseline: measure Eva today (scorecard, checks, latency) | A1 | APPROVED 2026-11-15: scorecard 21/23, median 4.5 s, p90 11.3 s |
-| WO-001B | Repair the two checks broken on 11-14/15 | A1 | ISSUED |
-| WO-002 | `--selftest`: prove a build can start before it is used | A1 | ISSUED (after 001B) |
+| WO-001B | Repair the two checks broken on 11-14/15 | A1 | APPROVED 2026-11-15 (caf7df3): all checks pass |
+| WO-002 | `--selftest`: prove a build can start before it is used | A1 | ISSUED -- current |
 | WO-003 | Safe update with health check and automatic rollback | A1 | ISSUED (after 002) |
 | WO-004 | Fast unit tests (pytest) beside run_checks.py | A1 | ISSUED (after 003) |
 | WO-005 | CI run on every push to main | A1 | ISSUED (after 004) |
